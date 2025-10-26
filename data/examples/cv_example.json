@@ -1,0 +1,239 @@
+{
+  "batch_id": "a4f3c8d1-7e2b-4f90-8c1e-3d5a7b9e4f12",
+  "overall_status": "completed",
+  "documents": [
+    {
+      "metadata": {
+        "file_name": "john_doe_cv.pdf",
+        "content_type": "application/pdf",
+        "size_bytes": 245760,
+        "document_type_provided": "cv",
+        "processing_status": "success",
+        "error_message": null
+      },
+      "parsed_data": {
+        "extracted_data": {
+          "profile": {
+            "basics": {
+              "first_name": "John",
+              "last_name": "Doe",
+              "gender": "male",
+              "emails": [
+                "john.doe@email.com",
+                "j.doe@professional.com"
+              ],
+              "urls": [
+                "https://linkedin.com/in/johndoe",
+                "https://github.com/johndoe"
+              ],
+              "phone_numbers": [
+                "+33 6 12 34 56 78",
+                "+33 1 23 45 67 89"
+              ],
+              "date_of_birth": {
+                "year": 1990,
+                "month": 5,
+                "day": 15
+              },
+              "address": "123 Avenue des Champs-Élysées, 75008 Paris, France",
+              "total_experience_in_years": 10,
+              "profession": "Senior Full-Stack Developer",
+              "summary": "Experienced full-stack developer with 10+ years in building scalable web applications. Expertise in Python, JavaScript, and cloud technologies. Strong background in fintech and e-commerce sectors with a proven track record of leading successful digital transformation projects.",
+              "skills": [
+                "Python",
+                "JavaScript",
+                "TypeScript",
+                "React",
+                "Node.js",
+                "FastAPI",
+                "Django",
+                "PostgreSQL",
+                "MongoDB",
+                "Docker",
+                "Kubernetes",
+                "AWS",
+                "Azure",
+                "Git",
+                "CI/CD",
+                "Agile",
+                "TDD"
+              ],
+              "has_driving_license": true
+            },
+            "languages": [
+              {
+                "name": "French",
+                "iso_code": "fr",
+                "fluency": 5
+              },
+              {
+                "name": "English",
+                "iso_code": "en",
+                "fluency": 4
+              },
+              {
+                "name": "Spanish",
+                "iso_code": "es",
+                "fluency": 2
+              }
+            ],
+            "educations": [
+              {
+                "start_year": 2008,
+                "is_current": false,
+                "end_year": 2013,
+                "issuing_organization": "École Polytechnique",
+                "description": "Master's degree in Computer Science with specialization in Software Engineering and Distributed Systems. Graduated with honors (mention Très Bien).",
+                "degree_name": "Master of Science in Computer Engineering"
+              },
+              {
+                "start_year": 2005,
+                "is_current": false,
+                "end_year": 2008,
+                "issuing_organization": "Lycée Louis-le-Grand",
+                "description": "Preparatory classes for Grandes Écoles in Mathematics and Physics",
+                "degree_name": "Classes Préparatoires MP"
+              }
+            ],
+            "trainings_and_certifications": [
+              {
+                "year": 2023,
+                "issuing_organization": "Amazon Web Services",
+                "description": "AWS Solutions Architect Professional certification demonstrating expertise in designing distributed applications and systems on AWS",
+                "certification_name": "AWS Certified Solutions Architect - Professional"
+              },
+              {
+                "year": 2022,
+                "issuing_organization": "Google Cloud",
+                "description": "Professional certification for designing and managing solutions on Google Cloud Platform",
+                "certification_name": "Google Cloud Professional Cloud Architect"
+              },
+              {
+                "year": 2021,
+                "issuing_organization": "Scrum Alliance",
+                "description": "Certified Scrum Master with expertise in agile project management",
+                "certification_name": "Certified Scrum Master (CSM)"
+              }
+            ],
+            "professional_experiences": [
+              {
+                "start_date": {
+                  "year": 2020,
+                  "month": 3
+                },
+                "is_current": true,
+                "end_date": null,
+                "duration_in_months": 57,
+                "company": "TechCorp International",
+                "location": "Paris, France",
+                "title": "Lead Full-Stack Developer",
+                "description": "Leading a team of 8 developers in building a next-generation fintech platform. Architected microservices infrastructure handling 10M+ daily transactions. Implemented CI/CD pipelines reducing deployment time by 70%. Mentored junior developers and conducted technical interviews.",
+                "skills_used": [
+                  "Python",
+                  "FastAPI",
+                  "React",
+                  "TypeScript",
+                  "PostgreSQL",
+                  "Redis",
+                  "Docker",
+                  "Kubernetes",
+                  "AWS",
+                  "GitLab CI"
+                ]
+              },
+              {
+                "start_date": {
+                  "year": 2017,
+                  "month": 6
+                },
+                "is_current": false,
+                "end_date": {
+                  "year": 2020,
+                  "month": 2
+                },
+                "duration_in_months": 32,
+                "company": "E-Commerce Solutions SA",
+                "location": "Lyon, France",
+                "title": "Senior Backend Developer",
+                "description": "Developed and maintained high-performance e-commerce platform serving 5M+ users. Designed RESTful APIs and implemented real-time inventory management system. Optimized database queries resulting in 40% performance improvement.",
+                "skills_used": [
+                  "Python",
+                  "Django",
+                  "PostgreSQL",
+                  "Elasticsearch",
+                  "RabbitMQ",
+                  "Docker",
+                  "Jenkins"
+                ]
+              },
+              {
+                "start_date": {
+                  "year": 2014,
+                  "month": 9
+                },
+                "is_current": false,
+                "end_date": {
+                  "year": 2017,
+                  "month": 5
+                },
+                "duration_in_months": 32,
+                "company": "StartupTech",
+                "location": "Paris, France",
+                "title": "Full-Stack Developer",
+                "description": "Built MVP for SaaS platform from scratch. Implemented payment processing integration with Stripe. Developed responsive web application using React and Node.js.",
+                "skills_used": [
+                  "JavaScript",
+                  "React",
+                  "Node.js",
+                  "MongoDB",
+                  "Express.js",
+                  "AWS EC2"
+                ]
+              }
+            ],
+            "projects": [
+              {
+                "name": "Open Source Contribution - FastAPI Extensions",
+                "description": "Contributed to FastAPI ecosystem by developing authentication middleware package with 5K+ GitHub stars. Maintains compatibility with latest FastAPI versions and provides JWT, OAuth2, and API key authentication.",
+                "technologies_used": [
+                  "Python",
+                  "FastAPI",
+                  "JWT",
+                  "OAuth2",
+                  "pytest"
+                ],
+                "url": "https://github.com/johndoe/fastapi-auth-middleware"
+              },
+              {
+                "name": "Personal Finance Tracker",
+                "description": "Developed a personal finance management application with budget tracking, expense categorization, and financial goal setting. Features real-time synchronization across devices and bank API integration.",
+                "technologies_used": [
+                  "React Native",
+                  "Node.js",
+                  "PostgreSQL",
+                  "Plaid API",
+                  "GraphQL"
+                ],
+                "url": "https://financetracker.johndoe.dev"
+              },
+              {
+                "name": "AI-Powered Code Review Tool",
+                "description": "Built an AI-powered code review assistant using GPT-4 API that provides automated code suggestions, security vulnerability detection, and best practices recommendations.",
+                "technologies_used": [
+                  "Python",
+                  "OpenAI API",
+                  "GitLab API",
+                  "Docker",
+                  "FastAPI"
+                ],
+                "url": "https://github.com/johndoe/ai-code-reviewer"
+              }
+            ]
+          },
+          "cv_language": "fr",
+          "cv_text": "John Doe\nSenior Full-Stack Developer\n\nContact:\nEmail: john.doe@email.com\nPhone: +33 6 12 34 56 78\nLinkedIn: linkedin.com/in/johndoe\nGitHub: github.com/johndoe\n\nSummary:\nExperienced full-stack developer with 10+ years in building scalable web applications...\n\n[Full CV text content would be included here]"
+        }
+      }
+    }
+  ]
+}

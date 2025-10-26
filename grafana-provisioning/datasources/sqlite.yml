@@ -1,0 +1,9 @@
+apiVersion: 1
+
+datasources:
+  - name: Ontology-SQLite
+    type: frser-sqlite-datasource
+    access: proxy
+    url: /data/ontology.db
+    isDefault: true
+    editable: true

@@ -1,0 +1,95 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.venv
+venv
+env
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.mypy_cache
+.ruff_cache
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+*.md
+!README.md
+docs/
+LICENSE
+
+# Environment files (security)
+.env
+.env.*
+!.env.example
+!.env.production
+
+# Logs
+*.log
+logs/
+
+# Development files
+tests/
+scripts/
+notebooks/
+*.ipynb
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Large data files that should be mounted
+data/candidats_competences.csv
+data/output/*.csv
+data/output/*.xlsx
+
+# Node modules (if any frontend)
+node_modules/
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+.Trash-*

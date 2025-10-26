@@ -1,0 +1,254 @@
+# ============================================================================
+# ONTOLOGY GENESIS ENGINE - Domain Configuration Schema
+# ============================================================================
+#
+# This file defines the complete specification for domain configurations.
+# Each domain instance requires one configuration file following this schema.
+#
+# Version: 1.0.0
+# Last Updated: 2025-10-25
+# ============================================================================
+
+# --- METADATA ---
+# Core identification and description of the domain
+metadata:
+  name: string                    # Human-readable domain name (e.g., "IT Skills Taxonomy")
+  domain_id: string               # Unique identifier (snake_case, e.g., "it_skills")
+  version: string                 # Semantic version (e.g., "1.0.0")
+  description: string             # Brief description of the domain
+  owner: string                   # Team or person responsible
+  created_at: datetime            # ISO 8601 timestamp
+  updated_at: datetime            # ISO 8601 timestamp
+
+# --- NODE TYPES ---
+# Define all types of entities (nodes) in this domain
+node_types:
+  - name: string                  # Type identifier (snake_case, e.g., "skill", "product")
+    display_name: string          # Human-readable name (e.g., "Technical Skill")
+    description: string           # Purpose and usage of this node type
+    schema:                       # Optional: Define expected properties
+      - property_name: string
+        property_type: string     # string, integer, float, boolean, date, json
+        required: boolean
+        default: any
+
+  # Example for IT Skills domain:
+  # - name: "skill"
+  #   display_name: "Technical Skill"
+  #   description: "A technical or soft skill in IT domain"
+  #   schema:
+  #     - property_name: "level"
+  #       property_type: "string"
+  #       required: false
+
+  # Example for Product Catalog domain:
+  # - name: "product"
+  #   display_name: "Product"
+  #   description: "A physical or digital product"
+  # - name: "category"
+  #   display_name: "Product Category"
+  #   description: "A product classification"
+
+# --- RELATIONSHIP TYPES ---
+# Define how nodes can be connected
+relationship_types:
+  - name: string                  # Relationship identifier (snake_case, e.g., "is_subtype_of")
+    display_name: string          # Human-readable (e.g., "Is Subtype Of")
+    description: string           # Semantic meaning of this relationship
+    source_types: list[string]    # Allowed source node types
+    target_types: list[string]    # Allowed target node types
+    properties:                   # Optional relationship properties
+      - property_name: string
+        property_type: string
+        required: boolean
+        default: any
+    cardinality: string           # Optional: "one_to_one", "one_to_many", "many_to_many"
+
+  # Example for IT Skills:
+  # - name: "is_subtype_of"
+  #   display_name: "Is Subtype Of"
+  #   description: "Hierarchical parent-child relationship"
+  #   source_types: ["skill"]
+  #   target_types: ["skill"]
+  #   cardinality: "many_to_one"
+
+  # Example for Product Catalog:
+  # - name: "belongs_to_category"
+  #   display_name: "Belongs To Category"
+  #   description: "Product category classification"
+  #   source_types: ["product"]
+  #   target_types: ["category"]
+
+# --- DATA SOURCES ---
+# Configure where raw data comes from and how to map it
+data_sources:
+  - name: string                  # Source identifier
+    type: string                  # csv, json, api, database
+    enabled: boolean              # Toggle this source on/off
+
+    # For CSV/File sources
+    path: string                  # Relative or absolute file path
+    encoding: string              # Default: utf-8
+    delimiter: string             # For CSV, default: ","
+
+    # For API sources
+    url: string
+    method: string                # GET, POST
+    headers: dict
+    auth_type: string             # none, basic, bearer, oauth2
+
+    # For Database sources
+    connection_string: string
+    query: string
+
+    # Column/Field mappings
+    mappings:
+      - source_column: string     # Column/field name in source data
+        target_node_type: string  # Node type from node_types
+        action: string            # "analyze_and_map" or "map_only" or "ignore"
+        transform: string         # Optional: Python expression for transformation
+
+    # Example for IT Skills CSV:
+    # - source_column: "competence_brute"
+    #   target_node_type: "skill"
+    #   action: "analyze_and_map"
+    #   transform: "value.lower().strip()"
+
+# --- LLM CONFIGURATION ---
+# Settings for AI-powered enrichment
+llm:
+  enabled: boolean                # Enable/disable LLM enrichment
+  provider: string                # openai, anthropic, ollama, custom
+  model: string                   # Model identifier (e.g., "gpt-4o-mini")
+  api_key_env: string             # Environment variable name for API key
+  temperature: float              # 0.0 to 1.0
+  max_tokens: integer
+
+  # Prompt templates (Jinja2 syntax)
+  prompts:
+    densification: |              # Template for enriching unknown nodes
+      You are an expert taxonomist for the domain: {{ metadata.name }}.
+
+      The unknown node to analyze is: "{{ node_name }}"
+
+      Available node types in this domain:
+      {% for node_type in node_types %}
+      - {{ node_type.name }}: {{ node_type.description }}
+      {% endfor %}
+
+      Available relationship types:
+      {% for rel_type in relationship_types %}
+      - {{ rel_type.name }}: {{ rel_type.description }}
+      {% endfor %}
+
+      Existing canonical nodes for reference (top 50):
+      {{ existing_nodes_sample | join(', ') }}
+
+      Respond ONLY with valid JSON:
+      {
+        "canonical_name": "normalized_name_in_snake_case",
+        "node_type": "one_of_the_defined_node_types",
+        "aliases": ["list", "of", "variations"],
+        "relationships": [
+          {
+            "type": "relationship_type_name",
+            "target": "target_node_canonical_name",
+            "properties": {}
+          }
+        ],
+        "properties": {
+          "custom_property": "value"
+        }
+      }
+
+      Rules:
+      1. canonical_name must be snake_case lowercase
+      2. node_type must exist in the defined node_types
+      3. relationship types must exist in defined relationship_types
+      4. target nodes should preferably exist in the current ontology
+      5. Include the original node_name in aliases
+
+    suggestion: |                 # Template for suggesting matches
+      Given the unknown node "{{ node_name }}" in domain {{ metadata.name }},
+      suggest the top {{ top_k }} most similar canonical nodes.
+
+      Available canonical nodes:
+      {{ canonical_nodes_sample | join(', ') }}
+
+      Return ONLY a JSON array of canonical node names:
+      ["canonical_name_1", "canonical_name_2", "canonical_name_3"]
+
+# --- VALIDATION RULES ---
+# Business rules for data quality
+validation:
+  auto_approve_threshold: integer # Auto-approve nodes with frequency > this value
+  min_alias_length: integer       # Minimum character length for aliases
+  max_alias_length: integer       # Maximum character length for aliases
+  allow_duplicates: boolean       # Allow duplicate aliases across nodes
+  require_relationships: boolean  # Every node must have at least one relationship
+  custom_validators:              # Optional: Python module.function references
+    - validator_function: string
+
+# --- EXPORT CONFIGURATION ---
+# Settings for exporting the ontology
+export:
+  formats:
+    - type: string                # cypher, graphml, rdf, json, csv
+      enabled: boolean
+      options: dict               # Format-specific options
+
+  # Neo4j-specific settings
+  neo4j:
+    enabled: boolean
+    node_label_mapping:           # Map node_types to Neo4j labels
+      skill: "Skill"
+      product: "Product"
+    relationship_label_mapping:   # Map relationship_types to Neo4j relationships
+      is_subtype_of: "IS_SUBTYPE_OF"
+      belongs_to_category: "BELONGS_TO_CATEGORY"
+
+# --- CACHING & PERFORMANCE ---
+cache:
+  enabled: boolean                # Enable in-memory caching
+  ttl_seconds: integer            # Cache time-to-live
+  max_size: integer               # Maximum cache entries
+
+# --- WEBHOOKS & INTEGRATIONS ---
+webhooks:
+  on_node_created:
+    - url: string
+      method: string
+      headers: dict
+  on_relationship_created:
+    - url: string
+      method: string
+      headers: dict
+  on_enrichment_completed:
+    - url: string
+      method: string
+      headers: dict
+
+# --- CUSTOM EXTENSIONS ---
+# Domain-specific customizations
+extensions:
+  custom_processors:              # Python module paths for custom logic
+    - module: string
+      function: string
+      event: string               # pre_process, post_process, validate
+
+  ui_customization:
+    primary_color: string         # Hex color for web UI
+    logo_url: string
+    custom_css: string
+
+# --- MIGRATION SETTINGS ---
+# For migrating from existing systems
+migration:
+  legacy_mappings:                # Map old identifiers to new ones
+    - old_id: string
+      new_id: string
+
+  deprecated_types:               # Types being phased out
+    - type_name: string
+      replacement: string
+      sunset_date: datetime

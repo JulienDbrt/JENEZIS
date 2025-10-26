@@ -1,0 +1,258 @@
+# ============================================================================
+# DOMAIN CONFIGURATION: E-Commerce Product Catalog
+# ============================================================================
+# Purpose: Normalize product names, SKUs, and classifications
+# Use Case: Marketplace consolidation, catalog management, search optimization
+# ============================================================================
+
+metadata:
+  name: "Product Catalog Ontology"
+  domain_id: "product_catalog"
+  version: "1.0.0"
+  description: "Unified taxonomy for product classification, attributes, and relationships in e-commerce"
+  owner: "Operations Team"
+  created_at: "2025-10-25T00:00:00Z"
+  updated_at: "2025-10-25T00:00:00Z"
+
+node_types:
+  - name: "product"
+    display_name: "Product"
+    description: "A physical or digital product sold on the platform"
+    schema:
+      - property_name: "sku"
+        property_type: "string"
+        required: false
+      - property_name: "price"
+        property_type: "float"
+        required: false
+      - property_name: "stock_level"
+        property_type: "integer"
+        required: false
+      - property_name: "brand"
+        property_type: "string"
+        required: false
+
+  - name: "category"
+    display_name: "Product Category"
+    description: "A hierarchical classification for products (e.g., Electronics > Smartphones)"
+    schema:
+      - property_name: "level"
+        property_type: "integer"
+        required: true
+        default: 1
+
+  - name: "attribute"
+    display_name: "Product Attribute"
+    description: "A characteristic or feature (e.g., color, size, material)"
+    schema:
+      - property_name: "data_type"
+        property_type: "string"
+        required: true
+        default: "string"
+      - property_name: "unit"
+        property_type: "string"
+        required: false
+
+relationship_types:
+  - name: "belongs_to_category"
+    display_name: "Belongs To Category"
+    description: "Product is classified under a category"
+    source_types: ["product"]
+    target_types: ["category"]
+    properties: []
+    cardinality: "many_to_one"
+
+  - name: "parent_category"
+    display_name: "Parent Category"
+    description: "Hierarchical category relationship (e.g., Smartphones → Electronics)"
+    source_types: ["category"]
+    target_types: ["category"]
+    properties: []
+    cardinality: "many_to_one"
+
+  - name: "has_attribute"
+    display_name: "Has Attribute"
+    description: "Product has a specific attribute with a value"
+    source_types: ["product"]
+    target_types: ["attribute"]
+    properties:
+      - property_name: "value"
+        property_type: "string"
+        required: true
+    cardinality: "many_to_many"
+
+  - name: "compatible_with"
+    display_name: "Compatible With"
+    description: "Product compatibility relationship (e.g., phone case compatible_with iPhone)"
+    source_types: ["product"]
+    target_types: ["product"]
+    properties:
+      - property_name: "compatibility_type"
+        property_type: "string"
+        required: false
+    cardinality: "many_to_many"
+
+  - name: "alternative_to"
+    display_name: "Alternative To"
+    description: "Product can substitute another (e.g., generic vs brand name)"
+    source_types: ["product"]
+    target_types: ["product"]
+    properties:
+      - property_name: "similarity_score"
+        property_type: "float"
+        required: false
+    cardinality: "many_to_many"
+
+data_sources:
+  - name: "supplier_catalog_feed"
+    type: "csv"
+    enabled: true
+    path: "data/supplier_products.csv"
+    encoding: "utf-8"
+    delimiter: ";"
+    mappings:
+      - source_column: "product_name"
+        target_node_type: "product"
+        action: "analyze_and_map"
+        transform: "value.strip().title()"
+      - source_column: "category_path"
+        target_node_type: "category"
+        action: "analyze_and_map"
+        transform: "value.split('>')"
+
+  - name: "marketplace_api"
+    type: "api"
+    enabled: false
+    url: "https://api.marketplace.com/products"
+    method: "GET"
+    headers:
+      Authorization: "Bearer ${API_TOKEN}"
+    auth_type: "bearer"
+    mappings:
+      - source_column: "title"
+        target_node_type: "product"
+        action: "analyze_and_map"
+
+llm:
+  enabled: true
+  provider: "openai"
+  model: "gpt-4o-mini"
+  api_key_env: "OPENAI_API_KEY"
+  temperature: 0.0
+  max_tokens: 400
+
+  prompts:
+    densification: |
+      You are an expert in e-commerce product taxonomy and classification.
+
+      Raw product name to analyze: "{{ node_name }}"
+      Domain: {{ metadata.name }}
+
+      Available node types:
+      {% for node_type in node_types %}
+      - {{ node_type.name }}: {{ node_type.description }}
+      {% endfor %}
+
+      Available relationship types:
+      {% for rel_type in relationship_types %}
+      - {{ rel_type.name }}: {{ rel_type.description }}
+      {% endfor %}
+
+      Existing canonical nodes (sample):
+      {{ existing_nodes_sample | join(', ') }}
+
+      Respond ONLY with valid JSON:
+      {
+        "canonical_name": "normalized_product_name",
+        "node_type": "product | category | attribute",
+        "aliases": ["original_name", "variation1", "synonym"],
+        "relationships": [
+          {
+            "type": "belongs_to_category",
+            "target": "category_canonical_name"
+          }
+        ],
+        "properties": {
+          "brand": "extracted_brand_if_present"
+        }
+      }
+
+      Rules:
+      1. canonical_name should be clear and descriptive
+      2. Extract brand name if recognizable and store in properties
+      3. Normalize product variations (e.g., "iPhone 12" and "Apple iPhone 12" → same canonical)
+      4. Create appropriate category relationships
+      5. Include common misspellings and abbreviations in aliases
+
+      Examples:
+      - "Apple iPhone 14 Pro" → {"canonical_name": "iphone_14_pro", "node_type": "product", "aliases": ["iphone 14 pro", "iphone14pro", "apple iphone 14 pro"], "relationships": [{"type": "belongs_to_category", "target": "smartphones"}], "properties": {"brand": "Apple"}}
+      - "USB-C Cable 2m" → {"canonical_name": "usb_c_cable_2m", "node_type": "product", "aliases": ["usb-c cable", "usbc cable 2m"], "relationships": [{"type": "belongs_to_category", "target": "cables"}]}
+
+    suggestion: |
+      Given the unknown product "{{ node_name }}",
+      suggest the top {{ top_k }} most similar canonical products.
+
+      Available canonical products:
+      {{ canonical_nodes_sample | join(', ') }}
+
+      Return ONLY a JSON array:
+      ["canonical_product_1", "canonical_product_2", "canonical_product_3"]
+
+validation:
+  auto_approve_threshold: 500
+  min_alias_length: 3
+  max_alias_length: 200
+  allow_duplicates: false
+  require_relationships: true
+
+export:
+  formats:
+    - type: "cypher"
+      enabled: true
+    - type: "csv"
+      enabled: true
+      options:
+        include_properties: true
+
+  neo4j:
+    enabled: true
+    node_label_mapping:
+      product: "Product"
+      category: "Category"
+      attribute: "Attribute"
+    relationship_label_mapping:
+      belongs_to_category: "BELONGS_TO"
+      parent_category: "PARENT_OF"
+      has_attribute: "HAS_ATTRIBUTE"
+      compatible_with: "COMPATIBLE_WITH"
+      alternative_to: "ALTERNATIVE_TO"
+
+cache:
+  enabled: true
+  ttl_seconds: 7200
+  max_size: 500000
+
+webhooks:
+  on_node_created:
+    - url: "https://inventory.example.com/webhook/product_created"
+      method: "POST"
+      headers:
+        X-API-Key: "${INVENTORY_API_KEY}"
+  on_relationship_created: []
+  on_enrichment_completed: []
+
+extensions:
+  custom_processors:
+    - module: "extensions.product_validators"
+      function: "validate_sku_format"
+      event: "pre_process"
+  ui_customization:
+    primary_color: "#10B981"
+    logo_url: ""
+    custom_css: ""
+
+migration:
+  legacy_mappings:
+    - old_id: "PROD-001"
+      new_id: "iphone_12_pro"
+  deprecated_types: []

@@ -1,0 +1,524 @@
+// ====================================
+// REQUÊTES CYPHER POUR NEO4J
+// Générées depuis: cv_response_example.json
+// ====================================
+
+// Requête 1/104
+MERGE (n:Candidat {id: 'CAND_john_doe_at_email_com'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com', n.firstName = 'John', n.lastName = 'Doe', n.email = 'john.doe@email.com', n.profession = 'Senior Full-Stack Developer', n.totalExperience = 10, n.summary = 'Experienced full-stack developer with 10+ years in building scalable web applications. Expertise in Python, JavaScript, and cloud technologies. Strong background in fintech and e-commerce sectors with a proven track record of leading successful digital transformation projects.'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com', n.firstName = 'John', n.lastName = 'Doe', n.email = 'john.doe@email.com', n.profession = 'Senior Full-Stack Developer', n.totalExperience = 10, n.summary = 'Experienced full-stack developer with 10+ years in building scalable web applications. Expertise in Python, JavaScript, and cloud technologies. Strong background in fintech and e-commerce sectors with a proven track record of leading successful digital transformation projects.';
+
+// Requête 2/104
+MERGE (n:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_exp_0', n.title = 'Lead Full-Stack Developer', n.location = 'Paris, France', n.startDate = '2020-03', n.endDate = 'Current', n.duration = 57, n.isCurrent = true, n.description = 'Leading a team of 8 developers in building a next-generation fintech platform. Architected microservices infrastructure handling 10M+ daily transactions. Implemented CI/CD pipelines reducing deployment time by 70%. Mentored junior developers and conducted technical interviews.'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_exp_0', n.title = 'Lead Full-Stack Developer', n.location = 'Paris, France', n.startDate = '2020-03', n.endDate = 'Current', n.duration = 57, n.isCurrent = true, n.description = 'Leading a team of 8 developers in building a next-generation fintech platform. Architected microservices infrastructure handling 10M+ daily transactions. Implemented CI/CD pipelines reducing deployment time by 70%. Mentored junior developers and conducted technical interviews.';
+
+// Requête 3/104
+MERGE (n:Entreprise {id: 'techcorp_international'})
+  ON CREATE SET n.id = 'techcorp_international', n.name = 'TechCorp International'
+  ON MATCH SET n.id = 'techcorp_international', n.name = 'TechCorp International';
+
+// Requête 4/104
+MERGE (n:Competence {name: 'python'})
+  ON CREATE SET n.name = 'python', n.originalName = 'Python'
+  ON MATCH SET n.name = 'python', n.originalName = 'Python';
+
+// Requête 5/104
+MERGE (n:Competence {name: 'fastapi'})
+  ON CREATE SET n.name = 'fastapi', n.originalName = 'FastAPI'
+  ON MATCH SET n.name = 'fastapi', n.originalName = 'FastAPI';
+
+// Requête 6/104
+MERGE (n:Competence {name: 'react'})
+  ON CREATE SET n.name = 'react', n.originalName = 'React'
+  ON MATCH SET n.name = 'react', n.originalName = 'React';
+
+// Requête 7/104
+MERGE (n:Competence {name: 'typescript'})
+  ON CREATE SET n.name = 'typescript', n.originalName = 'TypeScript'
+  ON MATCH SET n.name = 'typescript', n.originalName = 'TypeScript';
+
+// Requête 8/104
+MERGE (n:Competence {name: 'postgresql'})
+  ON CREATE SET n.name = 'postgresql', n.originalName = 'PostgreSQL'
+  ON MATCH SET n.name = 'postgresql', n.originalName = 'PostgreSQL';
+
+// Requête 9/104
+MERGE (n:Competence {name: 'redis'})
+  ON CREATE SET n.name = 'redis', n.originalName = 'Redis'
+  ON MATCH SET n.name = 'redis', n.originalName = 'Redis';
+
+// Requête 10/104
+MERGE (n:Competence {name: 'docker'})
+  ON CREATE SET n.name = 'docker', n.originalName = 'Docker'
+  ON MATCH SET n.name = 'docker', n.originalName = 'Docker';
+
+// Requête 11/104
+MERGE (n:Competence {name: 'kubernetes'})
+  ON CREATE SET n.name = 'kubernetes', n.originalName = 'Kubernetes'
+  ON MATCH SET n.name = 'kubernetes', n.originalName = 'Kubernetes';
+
+// Requête 12/104
+MERGE (n:Competence {name: 'aws'})
+  ON CREATE SET n.name = 'aws', n.originalName = 'AWS'
+  ON MATCH SET n.name = 'aws', n.originalName = 'AWS';
+
+// Requête 13/104
+MERGE (n:Competence {name: 'gitlab_ci'})
+  ON CREATE SET n.name = 'gitlab_ci', n.originalName = 'GitLab CI'
+  ON MATCH SET n.name = 'gitlab_ci', n.originalName = 'GitLab CI';
+
+// Requête 14/104
+MERGE (n:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_exp_1', n.title = 'Senior Backend Developer', n.location = 'Lyon, France', n.startDate = '2017-06', n.endDate = '2020-02', n.duration = 32, n.isCurrent = false, n.description = 'Developed and maintained high-performance e-commerce platform serving 5M+ users. Designed RESTful APIs and implemented real-time inventory management system. Optimized database queries resulting in 40% performance improvement.'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_exp_1', n.title = 'Senior Backend Developer', n.location = 'Lyon, France', n.startDate = '2017-06', n.endDate = '2020-02', n.duration = 32, n.isCurrent = false, n.description = 'Developed and maintained high-performance e-commerce platform serving 5M+ users. Designed RESTful APIs and implemented real-time inventory management system. Optimized database queries resulting in 40% performance improvement.';
+
+// Requête 15/104
+MERGE (n:Entreprise {id: 'ecommerce_solutions_sa'})
+  ON CREATE SET n.id = 'ecommerce_solutions_sa', n.name = 'E-Commerce Solutions SA'
+  ON MATCH SET n.id = 'ecommerce_solutions_sa', n.name = 'E-Commerce Solutions SA';
+
+// Requête 16/104
+MERGE (n:Competence {name: 'django'})
+  ON CREATE SET n.name = 'django', n.originalName = 'Django'
+  ON MATCH SET n.name = 'django', n.originalName = 'Django';
+
+// Requête 17/104
+MERGE (n:Competence {name: 'elasticsearch'})
+  ON CREATE SET n.name = 'elasticsearch', n.originalName = 'Elasticsearch'
+  ON MATCH SET n.name = 'elasticsearch', n.originalName = 'Elasticsearch';
+
+// Requête 18/104
+MERGE (n:Competence {name: 'rabbitmq'})
+  ON CREATE SET n.name = 'rabbitmq', n.originalName = 'RabbitMQ'
+  ON MATCH SET n.name = 'rabbitmq', n.originalName = 'RabbitMQ';
+
+// Requête 19/104
+MERGE (n:Competence {name: 'jenkins'})
+  ON CREATE SET n.name = 'jenkins', n.originalName = 'Jenkins'
+  ON MATCH SET n.name = 'jenkins', n.originalName = 'Jenkins';
+
+// Requête 20/104
+MERGE (n:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_exp_2', n.title = 'Full-Stack Developer', n.location = 'Paris, France', n.startDate = '2014-09', n.endDate = '2017-05', n.duration = 32, n.isCurrent = false, n.description = 'Built MVP for SaaS platform from scratch. Implemented payment processing integration with Stripe. Developed responsive web application using React and Node.js.'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_exp_2', n.title = 'Full-Stack Developer', n.location = 'Paris, France', n.startDate = '2014-09', n.endDate = '2017-05', n.duration = 32, n.isCurrent = false, n.description = 'Built MVP for SaaS platform from scratch. Implemented payment processing integration with Stripe. Developed responsive web application using React and Node.js.';
+
+// Requête 21/104
+MERGE (n:Entreprise {id: 'startuptech'})
+  ON CREATE SET n.id = 'startuptech', n.name = 'StartupTech'
+  ON MATCH SET n.id = 'startuptech', n.name = 'StartupTech';
+
+// Requête 22/104
+MERGE (n:Competence {name: 'javascript'})
+  ON CREATE SET n.name = 'javascript', n.originalName = 'JavaScript'
+  ON MATCH SET n.name = 'javascript', n.originalName = 'JavaScript';
+
+// Requête 23/104
+MERGE (n:Competence {name: 'node.js'})
+  ON CREATE SET n.name = 'node.js', n.originalName = 'Node.js'
+  ON MATCH SET n.name = 'node.js', n.originalName = 'Node.js';
+
+// Requête 24/104
+MERGE (n:Competence {name: 'mongodb'})
+  ON CREATE SET n.name = 'mongodb', n.originalName = 'MongoDB'
+  ON MATCH SET n.name = 'mongodb', n.originalName = 'MongoDB';
+
+// Requête 25/104
+MERGE (n:Competence {name: 'express.js'})
+  ON CREATE SET n.name = 'express.js', n.originalName = 'Express.js'
+  ON MATCH SET n.name = 'express.js', n.originalName = 'Express.js';
+
+// Requête 26/104
+MERGE (n:Competence {name: 'aws_ec2'})
+  ON CREATE SET n.name = 'aws_ec2', n.originalName = 'AWS EC2'
+  ON MATCH SET n.name = 'aws_ec2', n.originalName = 'AWS EC2';
+
+// Requête 27/104
+MERGE (n:Projet {id: 'CAND_john_doe_at_email_com_proj_0'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_proj_0', n.name = 'Open Source Contribution - FastAPI Extensions', n.description = 'Contributed to FastAPI ecosystem by developing authentication middleware package with 5K+ GitHub stars. Maintains compatibility with latest FastAPI versions and provides JWT, OAuth2, and API key authentication.', n.url = 'https://github.com/johndoe/fastapi-auth-middleware'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_proj_0', n.name = 'Open Source Contribution - FastAPI Extensions', n.description = 'Contributed to FastAPI ecosystem by developing authentication middleware package with 5K+ GitHub stars. Maintains compatibility with latest FastAPI versions and provides JWT, OAuth2, and API key authentication.', n.url = 'https://github.com/johndoe/fastapi-auth-middleware';
+
+// Requête 28/104
+MERGE (n:Competence {name: 'jwt'})
+  ON CREATE SET n.name = 'jwt', n.originalName = 'JWT'
+  ON MATCH SET n.name = 'jwt', n.originalName = 'JWT';
+
+// Requête 29/104
+MERGE (n:Competence {name: 'oauth2'})
+  ON CREATE SET n.name = 'oauth2', n.originalName = 'OAuth2'
+  ON MATCH SET n.name = 'oauth2', n.originalName = 'OAuth2';
+
+// Requête 30/104
+MERGE (n:Competence {name: 'pytest'})
+  ON CREATE SET n.name = 'pytest'
+  ON MATCH SET n.name = 'pytest';
+
+// Requête 31/104
+MERGE (n:Projet {id: 'CAND_john_doe_at_email_com_proj_1'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_proj_1', n.name = 'Personal Finance Tracker', n.description = 'Developed a personal finance management application with budget tracking, expense categorization, and financial goal setting. Features real-time synchronization across devices and bank API integration.', n.url = 'https://financetracker.johndoe.dev'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_proj_1', n.name = 'Personal Finance Tracker', n.description = 'Developed a personal finance management application with budget tracking, expense categorization, and financial goal setting. Features real-time synchronization across devices and bank API integration.', n.url = 'https://financetracker.johndoe.dev';
+
+// Requête 32/104
+MERGE (n:Competence {name: 'react_native'})
+  ON CREATE SET n.name = 'react_native', n.originalName = 'React Native'
+  ON MATCH SET n.name = 'react_native', n.originalName = 'React Native';
+
+// Requête 33/104
+MERGE (n:Competence {name: 'plaid_api'})
+  ON CREATE SET n.name = 'plaid_api', n.originalName = 'Plaid API'
+  ON MATCH SET n.name = 'plaid_api', n.originalName = 'Plaid API';
+
+// Requête 34/104
+MERGE (n:Competence {name: 'graphql'})
+  ON CREATE SET n.name = 'graphql', n.originalName = 'GraphQL'
+  ON MATCH SET n.name = 'graphql', n.originalName = 'GraphQL';
+
+// Requête 35/104
+MERGE (n:Projet {id: 'CAND_john_doe_at_email_com_proj_2'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_proj_2', n.name = 'AI-Powered Code Review Tool', n.description = 'Built an AI-powered code review assistant using GPT-4 API that provides automated code suggestions, security vulnerability detection, and best practices recommendations.', n.url = 'https://github.com/johndoe/ai-code-reviewer'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_proj_2', n.name = 'AI-Powered Code Review Tool', n.description = 'Built an AI-powered code review assistant using GPT-4 API that provides automated code suggestions, security vulnerability detection, and best practices recommendations.', n.url = 'https://github.com/johndoe/ai-code-reviewer';
+
+// Requête 36/104
+MERGE (n:Competence {name: 'openai_api'})
+  ON CREATE SET n.name = 'openai_api', n.originalName = 'OpenAI API'
+  ON MATCH SET n.name = 'openai_api', n.originalName = 'OpenAI API';
+
+// Requête 37/104
+MERGE (n:Competence {name: 'gitlab_api'})
+  ON CREATE SET n.name = 'gitlab_api', n.originalName = 'GitLab API'
+  ON MATCH SET n.name = 'gitlab_api', n.originalName = 'GitLab API';
+
+// Requête 38/104
+MERGE (n:Formation {id: 'CAND_john_doe_at_email_com_edu_0'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_edu_0', n.degreeName = 'Master of Science in Computer Engineering', n.startYear = 2008, n.endYear = 2013, n.description = 'Master\'s degree in Computer Science with specialization in Software Engineering and Distributed Systems. Graduated with honors (mention Très Bien).'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_edu_0', n.degreeName = 'Master of Science in Computer Engineering', n.startYear = 2008, n.endYear = 2013, n.description = 'Master\'s degree in Computer Science with specialization in Software Engineering and Distributed Systems. Graduated with honors (mention Très Bien).';
+
+// Requête 39/104
+MERGE (n:Ecole {id: 'polytechnique'})
+  ON CREATE SET n.id = 'polytechnique', n.name = 'École Polytechnique'
+  ON MATCH SET n.id = 'polytechnique', n.name = 'École Polytechnique';
+
+// Requête 40/104
+MERGE (n:Formation {id: 'CAND_john_doe_at_email_com_edu_1'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_edu_1', n.degreeName = 'Classes Préparatoires MP', n.startYear = 2005, n.endYear = 2008, n.description = 'Preparatory classes for Grandes Écoles in Mathematics and Physics'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_edu_1', n.degreeName = 'Classes Préparatoires MP', n.startYear = 2005, n.endYear = 2008, n.description = 'Preparatory classes for Grandes Écoles in Mathematics and Physics';
+
+// Requête 41/104
+MERGE (n:Ecole {id: 'lycée_louislegrand'})
+  ON CREATE SET n.id = 'lycée_louislegrand', n.name = 'Lycée Louis-le-Grand'
+  ON MATCH SET n.id = 'lycée_louislegrand', n.name = 'Lycée Louis-le-Grand';
+
+// Requête 42/104
+MERGE (n:Certification {id: 'CAND_john_doe_at_email_com_cert_0'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_cert_0', n.name = 'AWS Certified Solutions Architect - Professional', n.year = 2023, n.description = 'AWS Solutions Architect Professional certification demonstrating expertise in designing distributed applications and systems on AWS'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_cert_0', n.name = 'AWS Certified Solutions Architect - Professional', n.year = 2023, n.description = 'AWS Solutions Architect Professional certification demonstrating expertise in designing distributed applications and systems on AWS';
+
+// Requête 43/104
+MERGE (n:Organisation {id: 'amazon'})
+  ON CREATE SET n.id = 'amazon', n.name = 'Amazon'
+  ON MATCH SET n.id = 'amazon', n.name = 'Amazon';
+
+// Requête 44/104
+MERGE (n:Certification {id: 'CAND_john_doe_at_email_com_cert_1'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_cert_1', n.name = 'Google Cloud Professional Cloud Architect', n.year = 2022, n.description = 'Professional certification for designing and managing solutions on Google Cloud Platform'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_cert_1', n.name = 'Google Cloud Professional Cloud Architect', n.year = 2022, n.description = 'Professional certification for designing and managing solutions on Google Cloud Platform';
+
+// Requête 45/104
+MERGE (n:Organisation {id: 'google'})
+  ON CREATE SET n.id = 'google', n.name = 'Google'
+  ON MATCH SET n.id = 'google', n.name = 'Google';
+
+// Requête 46/104
+MERGE (n:Certification {id: 'CAND_john_doe_at_email_com_cert_2'})
+  ON CREATE SET n.id = 'CAND_john_doe_at_email_com_cert_2', n.name = 'Certified Scrum Master (CSM)', n.year = 2021, n.description = 'Certified Scrum Master with expertise in agile project management'
+  ON MATCH SET n.id = 'CAND_john_doe_at_email_com_cert_2', n.name = 'Certified Scrum Master (CSM)', n.year = 2021, n.description = 'Certified Scrum Master with expertise in agile project management';
+
+// Requête 47/104
+MERGE (n:Organisation {id: 'scrum_alliance'})
+  ON CREATE SET n.id = 'scrum_alliance', n.name = 'Scrum Alliance'
+  ON MATCH SET n.id = 'scrum_alliance', n.name = 'Scrum Alliance';
+
+// Requête 48/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Entreprise {id: 'techcorp_international'})
+MERGE (a)-[:CHEZ]->(b);
+
+// Requête 49/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MERGE (a)-[:A_TRAVAILLE]->(b);
+
+// Requête 50/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'python'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 51/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'fastapi'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 52/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'react'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 53/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'typescript'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 54/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'postgresql'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 55/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'redis'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 56/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'docker'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 57/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'kubernetes'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 58/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'aws'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 59/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_0'})
+MATCH (b:Competence {name: 'gitlab_ci'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 60/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Entreprise {id: 'ecommerce_solutions_sa'})
+MERGE (a)-[:CHEZ]->(b);
+
+// Requête 61/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MERGE (a)-[:A_TRAVAILLE]->(b);
+
+// Requête 62/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Competence {name: 'python'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 63/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Competence {name: 'django'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 64/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Competence {name: 'postgresql'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 65/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Competence {name: 'elasticsearch'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 66/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Competence {name: 'rabbitmq'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 67/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Competence {name: 'docker'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 68/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_1'})
+MATCH (b:Competence {name: 'jenkins'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 69/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MATCH (b:Entreprise {id: 'startuptech'})
+MERGE (a)-[:CHEZ]->(b);
+
+// Requête 70/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MERGE (a)-[:A_TRAVAILLE]->(b);
+
+// Requête 71/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MATCH (b:Competence {name: 'javascript'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 72/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MATCH (b:Competence {name: 'react'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 73/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MATCH (b:Competence {name: 'node.js'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 74/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MATCH (b:Competence {name: 'mongodb'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 75/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MATCH (b:Competence {name: 'express.js'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 76/104
+MATCH (a:Experience {id: 'CAND_john_doe_at_email_com_exp_2'})
+MATCH (b:Competence {name: 'aws_ec2'})
+MERGE (a)-[:A_UTILISE]->(b);
+
+// Requête 77/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Projet {id: 'CAND_john_doe_at_email_com_proj_0'})
+MERGE (a)-[:A_REALISE]->(b);
+
+// Requête 78/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_0'})
+MATCH (b:Competence {name: 'python'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 79/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_0'})
+MATCH (b:Competence {name: 'fastapi'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 80/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_0'})
+MATCH (b:Competence {name: 'jwt'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 81/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_0'})
+MATCH (b:Competence {name: 'oauth2'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 82/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_0'})
+MATCH (b:Competence {name: 'pytest'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 83/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Projet {id: 'CAND_john_doe_at_email_com_proj_1'})
+MERGE (a)-[:A_REALISE]->(b);
+
+// Requête 84/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_1'})
+MATCH (b:Competence {name: 'react_native'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 85/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_1'})
+MATCH (b:Competence {name: 'node.js'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 86/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_1'})
+MATCH (b:Competence {name: 'postgresql'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 87/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_1'})
+MATCH (b:Competence {name: 'plaid_api'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 88/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_1'})
+MATCH (b:Competence {name: 'graphql'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 89/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Projet {id: 'CAND_john_doe_at_email_com_proj_2'})
+MERGE (a)-[:A_REALISE]->(b);
+
+// Requête 90/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_2'})
+MATCH (b:Competence {name: 'python'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 91/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_2'})
+MATCH (b:Competence {name: 'openai_api'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 92/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_2'})
+MATCH (b:Competence {name: 'gitlab_api'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 93/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_2'})
+MATCH (b:Competence {name: 'docker'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 94/104
+MATCH (a:Projet {id: 'CAND_john_doe_at_email_com_proj_2'})
+MATCH (b:Competence {name: 'fastapi'})
+MERGE (a)-[:UTILISE]->(b);
+
+// Requête 95/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Formation {id: 'CAND_john_doe_at_email_com_edu_0'})
+MERGE (a)-[:A_SUIVI]->(b);
+
+// Requête 96/104
+MATCH (a:Formation {id: 'CAND_john_doe_at_email_com_edu_0'})
+MATCH (b:Ecole {id: 'polytechnique'})
+MERGE (a)-[:DELIVREE_PAR]->(b);
+
+// Requête 97/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Formation {id: 'CAND_john_doe_at_email_com_edu_1'})
+MERGE (a)-[:A_SUIVI]->(b);
+
+// Requête 98/104
+MATCH (a:Formation {id: 'CAND_john_doe_at_email_com_edu_1'})
+MATCH (b:Ecole {id: 'lycée_louislegrand'})
+MERGE (a)-[:DELIVREE_PAR]->(b);
+
+// Requête 99/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Certification {id: 'CAND_john_doe_at_email_com_cert_0'})
+MERGE (a)-[:A_OBTENU {year: 2023}]->(b);
+
+// Requête 100/104
+MATCH (a:Certification {id: 'CAND_john_doe_at_email_com_cert_0'})
+MATCH (b:Organisation {id: 'amazon'})
+MERGE (a)-[:DELIVREE_PAR]->(b);
+
+// Requête 101/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Certification {id: 'CAND_john_doe_at_email_com_cert_1'})
+MERGE (a)-[:A_OBTENU {year: 2022}]->(b);
+
+// Requête 102/104
+MATCH (a:Certification {id: 'CAND_john_doe_at_email_com_cert_1'})
+MATCH (b:Organisation {id: 'google'})
+MERGE (a)-[:DELIVREE_PAR]->(b);
+
+// Requête 103/104
+MATCH (a:Candidat {id: 'CAND_john_doe_at_email_com'})
+MATCH (b:Certification {id: 'CAND_john_doe_at_email_com_cert_2'})
+MERGE (a)-[:A_OBTENU {year: 2021}]->(b);
+
+// Requête 104/104
+MATCH (a:Certification {id: 'CAND_john_doe_at_email_com_cert_2'})
+MATCH (b:Organisation {id: 'scrum_alliance'})
+MERGE (a)-[:DELIVREE_PAR]->(b);

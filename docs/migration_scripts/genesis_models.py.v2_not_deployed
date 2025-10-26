@@ -1,0 +1,356 @@
+"""
+Ontology Genesis Engine - Universal PostgreSQL Models
+
+This module defines the domain-agnostic database schema for the Ontology Genesis Engine.
+Replaces domain-specific models (skills, companies, etc.) with generic node/relationship models.
+
+Version: 2.0.0 (Genesis Architecture)
+Migration Path: From postgres_models.py (v1.x) → genesis_models.py (v2.x)
+"""
+
+import enum
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
+from sqlalchemy.orm import DeclarativeBase, relationship
+
+
+class Base(DeclarativeBase):
+    """Base class for all models."""
+
+    pass
+
+
+# ============================================================================
+# DOMAIN CONFIGURATION
+# ============================================================================
+
+
+class DomainConfig(Base):
+    """
+    Stores domain configurations loaded from YAML files.
+    Enables multi-domain support in a single database instance.
+    """
+
+    __tablename__ = "domain_configs"
+
+    id = Column(Integer, primary_key=True)
+    domain_id = Column(String(255), unique=True, nullable=False, index=True)
+    domain_name = Column(String(255), nullable=False)
+    version = Column(String(50), nullable=False)
+    config_yaml = Column(Text, nullable=False)  # Full YAML content
+    config_json = Column(JSON, nullable=False)  # Parsed config for querying
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    canonical_nodes = relationship(
+        "CanonicalNode", back_populates="domain", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<DomainConfig(domain_id='{self.domain_id}', version='{self.version}')>"
+
+
+# ============================================================================
+# UNIVERSAL ONTOLOGY SCHEMA
+# ============================================================================
+
+
+class CanonicalNode(Base):
+    """
+    Universal canonical node entity.
+    Replaces: Skill, CanonicalEntity (companies/schools).
+
+    Each node has a type (e.g., 'skill', 'product', 'symptom') defined by the domain config.
+    """
+
+    __tablename__ = "canonical_nodes"
+
+    id = Column(Integer, primary_key=True)
+    domain_id = Column(
+        String(255), ForeignKey("domain_configs.domain_id", ondelete="CASCADE"), nullable=False
+    )
+    canonical_name = Column(String(255), nullable=False, index=True)
+    node_type = Column(String(100), nullable=False, index=True)  # e.g., 'skill', 'product'
+    display_name = Column(String(255), nullable=True)
+    properties = Column(JSON, default=dict)  # Flexible schema for node-specific data
+    embedding = Column(Vector(1536))  # OpenAI embeddings for semantic search
+    metadata = Column(JSON, default=dict)  # System metadata (creation source, confidence, etc.)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    domain = relationship("DomainConfig", back_populates="canonical_nodes")
+    aliases = relationship("NodeAlias", back_populates="canonical_node", cascade="all, delete-orphan")
+    outgoing_relationships = relationship(
+        "NodeRelationship",
+        foreign_keys="NodeRelationship.source_id",
+        back_populates="source_node",
+        cascade="all, delete-orphan",
+    )
+    incoming_relationships = relationship(
+        "NodeRelationship",
+        foreign_keys="NodeRelationship.target_id",
+        back_populates="target_node",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("domain_id", "canonical_name", "node_type", name="uq_node_domain"),
+        Index("idx_node_domain", "domain_id"),
+        Index("idx_node_type", "node_type"),
+        Index("idx_node_canonical_name", "canonical_name"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CanonicalNode(domain='{self.domain_id}', type='{self.node_type}', name='{self.canonical_name}')>"
+
+
+class NodeAlias(Base):
+    """
+    Universal alias mapping.
+    Replaces: Alias (skills), EntityAlias (companies/schools).
+
+    Maps variations/synonyms to canonical nodes.
+    """
+
+    __tablename__ = "node_aliases"
+
+    id = Column(Integer, primary_key=True)
+    domain_id = Column(
+        String(255), ForeignKey("domain_configs.domain_id", ondelete="CASCADE"), nullable=False
+    )
+    alias_name = Column(String(255), nullable=False, index=True)
+    canonical_id = Column(
+        Integer, ForeignKey("canonical_nodes.id", ondelete="CASCADE"), nullable=False
+    )
+    confidence = Column(Integer, default=100)  # 0-100 score
+    metadata = Column(JSON, default=dict)  # Source, language, etc.
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    canonical_node = relationship("CanonicalNode", back_populates="aliases")
+
+    __table_args__ = (
+        UniqueConstraint("domain_id", "alias_name", name="uq_alias_domain"),
+        Index("idx_alias_domain", "domain_id"),
+        Index("idx_alias_name", "alias_name"),
+        Index("idx_alias_canonical_id", "canonical_id"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<NodeAlias(domain='{self.domain_id}', alias='{self.alias_name}', canonical_id={self.canonical_id})>"
+        )
+
+
+class NodeRelationship(Base):
+    """
+    Universal relationship between nodes.
+    Replaces: Hierarchy (parent-child skills).
+
+    Supports any relationship type defined in domain config (e.g., 'is_subtype_of', 'belongs_to_category').
+    """
+
+    __tablename__ = "node_relationships"
+
+    id = Column(Integer, primary_key=True)
+    domain_id = Column(
+        String(255), ForeignKey("domain_configs.domain_id", ondelete="CASCADE"), nullable=False
+    )
+    source_id = Column(
+        Integer, ForeignKey("canonical_nodes.id", ondelete="CASCADE"), nullable=False
+    )
+    target_id = Column(
+        Integer, ForeignKey("canonical_nodes.id", ondelete="CASCADE"), nullable=False
+    )
+    relationship_type = Column(String(100), nullable=False, index=True)  # e.g., 'is_subtype_of'
+    properties = Column(JSON, default=dict)  # Relationship-specific data
+    metadata = Column(JSON, default=dict)  # System metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    source_node = relationship(
+        "CanonicalNode", foreign_keys=[source_id], back_populates="outgoing_relationships"
+    )
+    target_node = relationship(
+        "CanonicalNode", foreign_keys=[target_id], back_populates="incoming_relationships"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "domain_id",
+            "source_id",
+            "target_id",
+            "relationship_type",
+            name="uq_relationship_domain",
+        ),
+        Index("idx_rel_domain", "domain_id"),
+        Index("idx_rel_source", "source_id"),
+        Index("idx_rel_target", "target_id"),
+        Index("idx_rel_type", "relationship_type"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<NodeRelationship(domain='{self.domain_id}', type='{self.relationship_type}', {self.source_id}→{self.target_id})>"
+
+
+# ============================================================================
+# ENRICHMENT & TASK QUEUE
+# ============================================================================
+
+
+class EnrichmentStatus(str, enum.Enum):
+    """Enrichment task status."""
+
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+
+
+class EnrichmentQueue(Base):
+    """
+    Universal enrichment queue.
+    Tracks nodes requiring AI-powered enrichment (LLM classification, Wikipedia data, etc.).
+    """
+
+    __tablename__ = "enrichment_queue"
+
+    id = Column(Integer, primary_key=True)
+    domain_id = Column(
+        String(255), ForeignKey("domain_configs.domain_id", ondelete="CASCADE"), nullable=False
+    )
+    canonical_id = Column(
+        Integer, ForeignKey("canonical_nodes.id", ondelete="CASCADE"), nullable=True
+    )  # NULL if node not yet created
+    raw_value = Column(String(500), nullable=False)  # Original unmapped value
+    node_type = Column(String(100), nullable=False)  # Target node type
+    status = Column(SQLEnum(EnrichmentStatus), default=EnrichmentStatus.PENDING, nullable=False)
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0)
+    llm_response = Column(JSON, nullable=True)  # Store LLM suggestion
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    processed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("idx_enrich_domain", "domain_id"),
+        Index("idx_enrich_status", "status"),
+        Index("idx_enrich_created", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<EnrichmentQueue(domain='{self.domain_id}', raw='{self.raw_value}', status={self.status})>"
+
+
+# ============================================================================
+# ASYNC TASK QUEUE SCHEMA
+# ============================================================================
+
+
+class TaskStatus(str, enum.Enum):
+    """Task execution status."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class AsyncTask(Base):
+    """
+    Async task tracking for Celery jobs.
+    Domain-agnostic task tracking.
+    """
+
+    __tablename__ = "async_tasks"
+
+    id = Column(String(255), primary_key=True)  # Celery task ID
+    domain_id = Column(
+        String(255), ForeignKey("domain_configs.domain_id", ondelete="SET NULL"), nullable=True
+    )  # NULL for system tasks
+    task_name = Column(String(255), nullable=False, index=True)
+    status = Column(SQLEnum(TaskStatus), default=TaskStatus.PENDING, nullable=False)
+    result = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("idx_task_domain", "domain_id"),
+        Index("idx_task_status", "status"),
+        Index("idx_task_created", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AsyncTask(id='{self.id}', task='{self.task_name}', status={self.status})>"
+
+
+# ============================================================================
+# HUMAN VALIDATION WORKFLOW
+# ============================================================================
+
+
+class ValidationStatus(str, enum.Enum):
+    """Human validation status."""
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    MODIFIED = "MODIFIED"
+
+
+class HumanValidation(Base):
+    """
+    Tracks nodes requiring human validation.
+    Replaces CSV-based human review workflow.
+    """
+
+    __tablename__ = "human_validations"
+
+    id = Column(Integer, primary_key=True)
+    domain_id = Column(
+        String(255), ForeignKey("domain_configs.domain_id", ondelete="CASCADE"), nullable=False
+    )
+    raw_value = Column(String(500), nullable=False)
+    suggested_canonical_name = Column(String(255), nullable=False)
+    suggested_node_type = Column(String(100), nullable=False)
+    suggested_aliases = Column(JSON, nullable=False)  # List of aliases
+    suggested_relationships = Column(JSON, nullable=False)  # List of relationship objects
+    suggested_properties = Column(JSON, default=dict)
+    status = Column(SQLEnum(ValidationStatus), default=ValidationStatus.PENDING, nullable=False)
+    reviewer_notes = Column(Text, nullable=True)
+    reviewed_by = Column(String(255), nullable=True)  # User ID or email
+    frequency_count = Column(Integer, default=1)  # How often this raw value appears in data
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("idx_validation_domain", "domain_id"),
+        Index("idx_validation_status", "status"),
+        Index("idx_validation_created", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<HumanValidation(domain='{self.domain_id}', raw='{self.raw_value}', status={self.status})>"

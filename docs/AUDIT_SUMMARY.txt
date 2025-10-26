@@ -1,0 +1,183 @@
+JENEZIS - AUDIT COMPLET - RÉSUMÉ EXÉCUTIF
+==========================================
+
+Date: 26 octobre 2025
+Répertoire: /Users/juliendabert/Desktop/JENEZIS
+
+PROBLÈMES IDENTIFIÉS:
+====================
+
+1. FICHIERS À SUPPRIMER IMMÉDIATEMENT (5 fichiers, 30 min)
+   
+   [ ] /docker/nginx/sites-enabled/erwin-harmonizer.conf (144 L)
+       Raison: Référence à ancien nom "Erwin"
+       
+   [ ] /README_GENESIS.md (668 L)
+       Raison: Vision non-implémentée, obsolète
+       
+   [ ] /COUNTDOWN.md (60 L)
+       Raison: Checklist temporaire 48H du 2025-10-26
+       
+   [ ] /README_JENEZIS.md 
+       Raison: Doublon avec README.md
+       
+   [ ] /QUICK_START_LOCAL.md
+       Raison: Redondant avec README.md
+
+   [ ] __pycache__/ partout
+       Raison: Cache Python générés
+
+2. CODE MORT - TESTS DUPLIQUÉS (6+ fichiers, 1612 lignes, 2-3h)
+
+   [ ] test_cli_analyze_unmapped.py (249 L) + test_cli_analyze_unmapped_refactored.py (374 L)
+       → Fusionner, supprimer "_refactored"
+       
+   [ ] test_cli_densify_ontology.py (332 L) + test_cli_densify_ontology_refactored.py (657 L)
+       → Fusionner, supprimer "_refactored" (100% plus large!)
+       
+   [ ] test_night_beast.py + test_night_beast_comprehensive.py
+       → Fusionner, supprimer "_comprehensive"
+       
+   [ ] test_mass_densify.py + test_mass_densify_comprehensive.py
+       → Fusionner, supprimer "_comprehensive"
+       
+   [ ] test_metrics.py + test_metrics_direct.py
+       → Fusionner ou décider lequel garder
+
+3. SCHÉMA BD EN DOUBLET - CRITIQUE! (1h, DÉCISION REQUISE)
+
+   [ ] /src/db/genesis_models.py (v2.0 - Universal, domain-agnostic)
+       - 357 lignes
+       - 9 tables génériques
+       
+   [ ] /src/db/postgres_models.py (v1.x - Legacy, domain-specific)
+       - Docstring: "for Erwin Harmonizer" 
+       - 234 lignes
+       - 6 tables spécialisées
+       
+   ACTION REQUISE:
+   - Déterminer lequel est actuellement actif en production
+   - Archiver l'autre dans /docs/migration_scripts/
+   - Documenter la stratégie de migration
+
+4. RÉFÉRENCES AU NOM ANCIEN "ERWIN" (30 min)
+
+   [ ] /src/db/postgres_models.py (ligne 2) - docstring
+       → Mettre à jour vers "JENEZIS"
+       
+   [ ] /docker/nginx/sites-enabled/erwin-harmonizer.conf
+       → À SUPPRIMER (voir point 1)
+       
+   [ ] /EXECUTION_48H.md (lignes 15, 38)
+       → Mettre à jour variables pg_dump et DATABASE_URL
+
+5. DOCUMENTATION CONFUSE (1h)
+
+   [ ] 3 README fichiers (README.md, README_JENEZIS.md, README_GENESIS.md)
+       → Garder UN SEUL, archiver les autres
+       
+   [ ] Pas de document unique d'architecture
+       → Créer /docs/ARCHITECTURE.md
+       
+   [ ] Migration v1→v2 pas documentée
+       → Créer /docs/MIGRATION_STATUS.md
+
+6. SCRIPT DE MIGRATION UNIQUE (10 min)
+
+   [ ] /temp_scripts/migrate_sqlite_to_postgres.py
+       → Archiver dans /docs/migration_scripts/
+       → Créer README.md explicatif
+       → Supprimer dossier /temp_scripts/ après
+
+7. CONFIGURATION MONITORING OBSOLÈTE (À VÉRIFIER)
+
+   [ ] /grafana-provisioning/datasources/sqlite.yml
+       → Référence à SQLite après migration PostgreSQL
+       → Vérifier si utilisé, sinon supprimer
+
+FICHIERS NON PROBLÉMATIQUES:
+============================
+
+✓ poetry.lock - Nécessaire pour reproducibilité
+✓ cv_response_example.json - Utilisé pour documentation/tests
+✓ cypher_queries.txt - Générés mais utiles pour audits
+✓ domains/*.yaml - Bien documentés
+✓ .env.example - Correct
+✓ Dockerfile - Structure correcte
+
+STATISTIQUES:
+=============
+
+Python files:                 72
+Test files:                   29  
+Documentation files:           6 (à consolider en 1-2)
+Configuration files:          11
+Total Python lines:        ~8,000
+Duplicate test lines:      ~1,612
+Obsolete/unclear files:        5
+Model files in conflict:       2
+
+PLAN D'ACTION PRIORITISÉ:
+========================
+
+URGENT (30 min):
+1. Supprimer 5 fichiers obsolètes
+2. Nettoyer __pycache__
+3. Git commit: "cleanup: pre-refactoring backup"
+
+TRÈS IMPORTANT (1h, BLOQUANT):
+4. Déterminer lequel des 2 schémas BD est actif
+5. Documenter dans /docs/DATABASE_SCHEMA.md
+6. Décider: Garder 1 ou 2 fichiers modèles
+
+IMPORTANT (2-3h):
+7. Fusionner les tests dupliqués
+8. Mettre à jour références "Erwin"
+9. Consolider documentation
+10. Créer /docs/ARCHITECTURE.md
+
+OPTIONNEL (1-2h):
+11. Audit statique des imports non-utilisés
+12. Vérifier configurations Grafana/monitoring
+
+TEMPS TOTAL: 1-2 jours de refactoring ciblé
+GAIN: 15-20% du repo plus clair et léger
+
+DOCUMENTS GÉNÉRÉS:
+==================
+
+1. /docs/AUDIT_COMPLET.md (16 KB)
+   - Analyse détaillée de tous les problèmes
+   - Tables comparatives
+   - Recommandations spécifiques
+   
+2. /docs/CLEANUP_CHECKLIST.md
+   - Actions concrètes par phase
+   - Commandes bash à exécuter
+   - Checklist de validation
+   
+3. /docs/AUDIT_SUMMARY.txt (ce fichier)
+   - Résumé exécutif
+   - Liste des fichiers à traiter
+
+PROCHAINES ÉTAPES:
+==================
+
+[ ] Lire /docs/AUDIT_COMPLET.md pour contexte complet
+[ ] Exécuter phase 1: Suppression immédiate (30 min)
+[ ] Exécuter phase 3: Diagnostic BD (1h, CRITIQUE)
+[ ] Décider sur schémas BD
+[ ] Fusionner les tests (2-3h)
+[ ] Commit final avec message "refactor: cleanup transition artifacts"
+
+CONTACTS/DÉCISIONS REQUISES:
+============================
+
+Question 1: Lequel des 2 schémas BD (genesis vs postgres) est actif?
+Question 2: Garder 1 ou 2 README?
+Question 3: Fusionner tous les tests ou garder "_refactored" versions?
+
+Voir /docs/AUDIT_COMPLET.md pour détails et contexte complet.
+
+---
+Audit généré: 2025-10-26

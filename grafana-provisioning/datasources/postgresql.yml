@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: JENEZIS-PostgreSQL
+    type: postgres
+    access: proxy
+    url: jenezis-postgres:5432
+    database: jenezis
+    user: jenezis
+    secureJsonData:
+      password: jenezis
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 100
+      maxIdleConns: 100
+      connMaxLifetime: 14400
+      postgresVersion: 1600
+    isDefault: true
+    editable: true

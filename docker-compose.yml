@@ -1,0 +1,250 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: jenezis-postgres
+    environment:
+      POSTGRES_DB: jenezis
+      POSTGRES_USER: jenezis
+      POSTGRES_PASSWORD: jenezis
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jenezis -d jenezis"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - jenezis-network
+
+  # Redis for Celery task queue
+  redis:
+    image: redis:7-alpine
+    container_name: jenezis-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - jenezis-network
+
+  # Neo4j Graph Database
+  neo4j:
+    image: neo4j:5-community
+    container_name: jenezis-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/jenezis123
+      NEO4J_dbms_memory_pagecache_size: 1G
+      NEO4J_dbms_memory_heap_initial__size: 1G
+      NEO4J_dbms_memory_heap_max__size: 2G
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - jenezis-network
+
+  # Harmonizer API Service
+  harmonizer-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jenezis-harmonizer-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SERVICE_NAME=harmonizer
+      - PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,http://localhost:8001}
+      - NODE_ENV=${NODE_ENV:-production}
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN}
+    volumes:
+      # Persistent data volumes
+      - ./data/databases:/app/data/databases
+      - ./data/output:/app/data/output
+      - harmonizer-logs:/app/logs
+    command: >
+      gunicorn src.api.main:app
+      -w ${GUNICORN_WORKERS:-4}
+      -k uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --access-logfile /app/logs/access.log
+      --error-logfile /app/logs/error.log
+      --log-level ${LOG_LEVEL:-info}
+      --timeout 120
+      --graceful-timeout 30
+      --max-requests 1000
+      --max-requests-jitter 50
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - jenezis-network
+
+  # Entity Resolver API Service
+  entity-resolver-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jenezis-entity-resolver-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - SERVICE_NAME=entity-resolver
+      - PORT=8001
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,http://localhost:8001}
+      - NODE_ENV=${NODE_ENV:-production}
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN}
+    volumes:
+      # Shared database volume with harmonizer
+      - ./data/databases:/app/data/databases
+      - ./data/output:/app/data/output
+      - entity-resolver-logs:/app/logs
+    command: >
+      gunicorn src.entity_resolver.api:app
+      -w ${GUNICORN_WORKERS:-4}
+      -k uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8001
+      --access-logfile /app/logs/access.log
+      --error-logfile /app/logs/error.log
+      --log-level ${LOG_LEVEL:-info}
+      --timeout 120
+      --graceful-timeout 30
+      --max-requests 1000
+      --max-requests-jitter 50
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - harmonizer-api
+    networks:
+      - jenezis-network
+
+  # Nginx reverse proxy for production (optional but recommended)
+  nginx:
+    image: nginx:alpine
+    container_name: jenezis-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - harmonizer-api
+      - entity-resolver-api
+    networks:
+      - jenezis-network
+    profiles:
+      - production
+
+  # Prometheus for monitoring (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jenezis-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - jenezis-network
+    profiles:
+      - monitoring
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: jenezis-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - jenezis-network
+    profiles:
+      - monitoring
+
+networks:
+  jenezis-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  neo4j_import:
+    driver: local
+  neo4j_plugins:
+    driver: local
+  harmonizer-logs:
+    driver: local
+  entity-resolver-logs:
+    driver: local
+  nginx-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
