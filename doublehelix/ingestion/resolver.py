@@ -1,114 +1,110 @@
 """
-Entity resolver to merge new entities with existing ones in the graph,
-preventing duplicates. Uses fuzzy string matching.
+Neuro-Symbolic Entity Resolution Service (The "Harmonizer").
+Resolves extracted entity strings against the "Canonical Store" in PostgreSQL.
 """
 import logging
 from typing import List, Dict, Any, Optional
 
-from fuzzywuzzy import process
-from neo4j import AsyncDriver
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+from pgvector.sqlalchemy import Vector
 
 from doublehelix.core.config import get_settings
+from doublehelix.storage.metadata_store import CanonicalNode, NodeAlias
+from doublehelix.ingestion.embedder import Embedder
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-class EntityResolver:
+RESOLUTION_CONFIDENCE_THRESHOLD = 0.95 # TODO: Move to settings
+
+class Resolver:
     """
-    Resolves newly extracted entities against a knowledge base of existing
-    entities to find canonical matches, using a full-text index for scalability.
+    Orchestrates the resolution of extracted entities against the canonical store.
+    Pipeline: Exact Match -> Vector Similarity -> Enrichment Queue.
     """
-    def __init__(self, driver: AsyncDriver):
-        self.driver = driver
-        self.database = settings.NEO4J_DATABASE
-        self.matching_threshold = settings.ENTITY_RESOLUTION_THRESHOLD
+    def __init__(self, db: AsyncSession, embedder: Embedder):
+        self.db = db
+        self.embedder = embedder
 
-    async def _find_candidates_in_graph(self, entity_name: str) -> List[Dict[str, Any]]:
-        """
-        Uses the full-text index to find candidate entities in the graph.
-        """
-        # The query uses a fuzzy match operator `~` if desired, or a standard search.
-        # For broader matches, we can add a similarity threshold.
-        query = """
-        CALL db.index.fulltext.queryNodes('entity_names_ft_index', $entity_name + '~0.8')
-        YIELD node, score
-        RETURN node.canonical_id as id, node.name as name, score
-        LIMIT 10
-        """
-        try:
-            records, _, _ = await self.driver.execute_query(
-                query, entity_name=entity_name, database_=self.database
-            )
-            return [record.data() for record in records]
-        except Exception as e:
-            # This can happen if the index is not ready yet.
-            logger.warning(f"Could not query full-text index (it might still be populating). Falling back to non-indexed search for '{entity_name}'. Error: {e}")
-            return []
+    async def _find_by_exact_match(self, alias_text: str) -> Optional[int]:
+        """Step 1 (Symbolic): Find a case-insensitive exact match in aliases."""
+        query = (
+            select(NodeAlias)
+            .options(selectinload(NodeAlias.canonical_node))
+            .where(NodeAlias.alias.ilike(alias_text))
+        )
+        result = await self.db.execute(query)
+        node_alias = result.scalars().first()
+        if node_alias:
+            logger.info(f"Resolved '{alias_text}' via exact match to canonical node ID {node_alias.canonical_node_id}.")
+            return node_alias.canonical_node_id
+        return None
 
+    async def _find_by_vector_similarity(self, name: str) -> Optional[dict]:
+        """Step 2 (Neuro): Find the closest match using vector similarity search."""
+        embedding = (await self.embedder.embed_batch([name]))[0]
+        if not embedding:
+            return None
 
-    async def resolve_and_map(self, new_entities: List[Dict[str, Any]]) -> Dict[str, str]:
+        # Query using cosine distance (<->) from pgvector
+        query = (
+            select(CanonicalNode, CanonicalNode.embedding.cosine_distance(embedding).label('distance'))
+            .order_by(CanonicalNode.embedding.cosine_distance(embedding))
+            .limit(1)
+        )
+        result = await self.db.execute(query)
+        match = result.first()
+
+        if match:
+            node, distance = match
+            similarity = 1 - distance # Cosine distance -> similarity
+            logger.info(f"Vector search for '{name}' found closest match '{node.name}' with similarity {similarity:.2f}.")
+            return {"node": node, "similarity": similarity}
+        return None
+
+    async def resolve_entity(self, extracted_name: str, extracted_type: str) -> dict:
         """
-        Resolves a list of new entities against the existing graph entities using
-        an indexed search approach.
-
-        Returns:
-            A mapping dictionary from the new entity's temporary ID to the
-            canonical ID (either existing or the new one if no match is found).
+        Resolves a single entity using the neuro-symbolic pipeline.
+        Returns a dictionary with resolution status and data.
         """
-        if not new_entities:
-            return {}
+        # 1. Exact Match
+        canonical_id = await self._find_by_exact_match(extracted_name)
+        if canonical_id:
+            return {"status": "resolved", "canonical_id": canonical_id, "original_name": extracted_name}
 
-        id_map = {}
+        # 2. Vector Search
+        vector_match = await self._find_by_vector_similarity(extracted_name)
+        if vector_match and vector_match["similarity"] >= RESOLUTION_CONFIDENCE_THRESHOLD:
+            return {"status": "resolved", "canonical_id": vector_match["node"].id, "original_name": extracted_name}
+
+        # 3. Could not resolve with high confidence
+        logger.info(f"Could not resolve '{extracted_name}'. Sending to Enrichment Queue.")
+        return {
+            "status": "unresolved",
+            "name": extracted_name,
+            "type": extracted_type,
+            "similarity_match": {
+                "node_name": vector_match["node"].name if vector_match else None,
+                "similarity": vector_match["similarity"] if vector_match else 0.0,
+            }
+        }
+
+    async def resolve_all(self, entities: List[Dict]) -> (List[Dict], List[Dict]):
+        """
+        Resolves a batch of entities.
+        Returns two lists: one of resolved mappings, one of unresolved items for the enrichment queue.
+        """
+        resolved_map = {}
+        unresolved_items = []
         
-        for new_entity in new_entities:
-            new_id = new_entity['id']
-            new_name = new_entity['name']
-
-            # Find candidates using the efficient, indexed graph search
-            candidates = await self._find_candidates_in_graph(new_name)
-            
-            if not candidates:
-                # No candidates found, this is a new entity
-                id_map[new_id] = new_id
-                continue
-
-            # Use fuzzywuzzy on the small set of candidates
-            choices = {c['name']: c['id'] for c in candidates}
-            best_match = process.extractOne(new_name, choices.keys(), score_cutoff=self.matching_threshold)
-
-            if best_match:
-                matched_name, score = best_match
-                canonical_id = choices[matched_name]
-                id_map[new_id] = canonical_id
-                logger.info(f"Resolved '{new_name}' -> '{matched_name}' (score: {score}). Mapping '{new_id}' -> '{canonical_id}'.")
+        for entity in entities:
+            result = await self.resolve_entity(entity['name'], entity['type'])
+            if result['status'] == 'resolved':
+                # Map the temporary LLM-generated ID to the canonical ID
+                resolved_map[entity['id']] = result['canonical_id']
             else:
-                # No suitable match found among candidates, the new entity becomes canonical
-                id_map[new_id] = new_id
-
-        return id_map
-
-    def remap_relations(self, relations: List[Dict[str, Any]], id_map: Dict[str, str]) -> List[Dict[str, Any]]:
-        """
-        Updates the source and target IDs in relations based on the resolution map.
-        """
-        remapped_relations = []
-        for rel in relations:
-            source_id = rel.get("source_id")
-            target_id = rel.get("target_id")
-            
-            remapped_source = id_map.get(source_id)
-            remapped_target = id_map.get(target_id)
-
-            if remapped_source and remapped_target:
-                # Avoid self-referential loops which are usually not meaningful
-                if remapped_source == remapped_target:
-                    continue
-
-                new_rel = rel.copy()
-                new_rel["source_id"] = remapped_source
-                new_rel["target_id"] = remapped_target
-                remapped_relations.append(new_rel)
-            else:
-                logger.warning(f"Could not remap relation: {rel}. Source or target ID missing from map.")
-                
-        return remapped_relations
+                unresolved_items.append(result)
+        
+        return resolved_map, unresolved_items
