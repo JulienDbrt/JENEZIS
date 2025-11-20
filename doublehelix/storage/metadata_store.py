@@ -47,10 +47,32 @@ class Document(Base):
         return f"<Document(id={self.id}, filename='{self.filename}', status='{self.status}')>"
 
 
+class APIKey(Base):
+    """Represents a secure API key for authentication."""
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key_hash = Column(String(64), nullable=False, unique=True, index=True)
+    description = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f"<APIKey(id={self.id}, description='{self.description}', is_active={self.is_active})>"
+
+
 async def create_tables(engine):
     """Utility function to create database tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+async def get_api_key_by_hash(db: AsyncSession, key_hash: str) -> APIKey | None:
+    """Retrieves an active API key by its SHA256 hash."""
+    result = await db.execute(
+        select(APIKey).where(APIKey.key_hash == key_hash, APIKey.is_active == True)
+    )
+    return result.scalars().first()
 
 
 async def get_document_by_hash(db: AsyncSession, doc_hash: str) -> Document | None:

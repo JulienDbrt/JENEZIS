@@ -17,6 +17,9 @@ from starlette.status import (
     HTTP_409_CONFLICT,
 )
 
+import secrets
+from sqlalchemy import select, func
+
 from doublehelix.core.config import get_settings
 from doublehelix.core.connections import (
     close_connections,
@@ -25,13 +28,14 @@ from doublehelix.core.connections import (
     get_neo4j_driver,
     sql_engine,
 )
-from doublehelix.core.security import get_api_key
+from doublehelix.core.security import get_api_key, get_key_hash
 from doublehelix.storage.metadata_store import (
     Document,
     DocumentStatus,
     get_document_by_hash,
     get_document_by_id,
     create_tables,
+    APIKey,
 )
 from doublehelix.storage.graph_store import GraphStore
 from doublehelix.rag.retriever import HybridRetriever
@@ -51,10 +55,34 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
     logger.info("DoubleHelix API starting up...")
     
-    # Initialize DB tables and graph constraints
+    # Initialize DB tables
     await create_tables(sql_engine)
     logger.info("SQL tables ensured.")
-    
+
+    # Provision initial API key if none exist
+    async with get_db_session() as db:
+        result = await db.execute(select(func.count(APIKey.id)))
+        key_count = result.scalar_one()
+        if key_count == 0:
+            logger.warning("No API keys found in the database. Provisioning a new one.")
+            new_key = secrets.token_hex(32)
+            key_hash = get_key_hash(new_key)
+            
+            first_key = APIKey(
+                key_hash=key_hash,
+                description="Initial admin key",
+                is_active=True
+            )
+            db.add(first_key)
+            await db.commit()
+            
+            logger.critical("="*80)
+            logger.critical("THIS IS THE ONLY TIME YOUR NEW ADMIN API KEY WILL BE SHOWN")
+            logger.critical(f"  Bearer Token: {new_key}")
+            logger.critical("Save this key securely. You will need it to interact with the API.")
+            logger.critical("="*80)
+
+    # Initialize graph constraints
     graph_store = GraphStore(await get_neo4j_driver())
     await graph_store.initialize_constraints_and_indexes()
     logger.info("Graph constraints and indexes ensured.")

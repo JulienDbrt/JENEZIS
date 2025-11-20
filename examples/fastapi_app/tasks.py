@@ -143,19 +143,22 @@ def process_document(self, document_id: int):
 
 @shared_task(name="tasks.delete_document")
 def delete_document_task(document_id: int):
-    """Asynchronous task to delete a document and all its associated data."""
+    """
+    Asynchronous task to delete a document and its direct associations (chunks).
+    Orphaned entities are handled by a separate garbage collection task.
+    """
     logger.info(f"Starting deletion process for document_id: {document_id}")
     try:
         async def run_async_delete():
-            # First, update status to DELETING
+            # 1. Update status to DELETING
             async with get_db_session() as db:
                 await update_document_status(db, document_id, DocumentStatus.DELETING)
 
-            # Delete from graph
+            # 2. Delete from graph (docs and chunks only)
             graph_store = GraphStore(get_neo4j_driver())
             await graph_store.delete_document_and_associated_data(document_id)
 
-            # Finally, delete from metadata DB and S3
+            # 3. Delete from metadata DB and S3
             async with get_db_session() as db:
                 doc = await get_document_by_id(db, document_id)
                 if doc:
@@ -175,10 +178,28 @@ def delete_document_task(document_id: int):
         
     except Exception as e:
         logger.error(f"Deletion failed for document {document_id}. Error: {e}", exc_info=True)
-        # Optionally, revert status back to FAILED or another state
-        async def update_status():
+        async def update_status_on_fail():
             async with get_db_session() as db:
                 await update_document_status(db, document_id, DocumentStatus.FAILED, f"Deletion failed: {e}")
         import asyncio
-        asyncio.run(update_status())
+        asyncio.run(update_status_on_fail())
         raise
+
+@shared_task(name="tasks.run_garbage_collection")
+def run_garbage_collection():
+    """
+    Periodically runs the garbage collection process for orphaned entities in the graph.
+    """
+    logger.info("Starting orphaned entity garbage collection task...")
+    try:
+        async def run_async_gc():
+            graph_store = GraphStore(get_neo4j_driver())
+            await graph_store.garbage_collect_orphaned_entities()
+        
+        import asyncio
+        asyncio.run(run_async_gc())
+        logger.info("Garbage collection task finished successfully.")
+    except Exception as e:
+        logger.error(f"Garbage collection task failed: {e}", exc_info=True)
+        raise
+

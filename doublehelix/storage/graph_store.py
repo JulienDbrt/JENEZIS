@@ -35,6 +35,9 @@ class GraphStore:
 
             # Vector Index for Chunk embeddings
             try:
+                await session.run("CREATE FULLTEXT INDEX entity_names_ft_index IF NOT EXISTS FOR (e:Entity) ON (e.name)")
+                logger.info("Full-text index 'entity_names_ft_index' ensured.")
+
                 await session.run(f"""
                 CREATE VECTOR INDEX `chunk_embeddings` IF NOT EXISTS
                 FOR (c:Chunk) ON (c.embedding)
@@ -45,7 +48,7 @@ class GraphStore:
                 """)
                 logger.info("Vector index 'chunk_embeddings' ensured.")
             except Exception as e:
-                logger.error(f"Failed to create vector index 'chunk_embeddings'. Your Neo4j version might not support it. Error: {e}")
+                logger.error(f"Failed to create vector index or full-text index. Your Neo4j version/edition might not support it. Error: {e}")
 
     async def add_document_node(self, document_id: int, filename: str):
         """Creates a 'Document' node in the graph."""
@@ -122,33 +125,43 @@ class GraphStore:
 
     async def delete_document_and_associated_data(self, document_id: int):
         """
-        Deletes a document, its chunks, and any entities that become orphaned
-        as a result of this deletion.
+        Deletes a document and its chunks from the graph.
+        This operation is now decoupled from orphan entity cleanup.
         """
-        # This is a complex, multi-step transaction.
         query = """
-        MATCH (d:Document {id: $document_id})-[r_has_chunk:HAS_CHUNK]->(c:Chunk)
-        // Collect chunks and the document for deletion
-        WITH d, collect(c) as chunks_to_delete
-        // Find all entities mentioned in these chunks
-        OPTIONAL MATCH (c_to_del)-[:MENTIONS]->(e:Entity)
-        WHERE c_to_del in chunks_to_delete
-        WITH d, chunks_to_delete, collect(DISTINCT e) as mentioned_entities
-        // For each mentioned entity, check if it has relationships to other chunks
-        // not in the deletion list.
-        UNWIND mentioned_entities as entity
-        OPTIONAL MATCH (entity)<-[:MENTIONS]-(other_chunk:Chunk)
-        WHERE NOT other_chunk in chunks_to_delete
-        WITH d, chunks_to_delete, entity, count(other_chunk) as other_connections
-        // Collect orphaned entities (those with no other connections)
-        WITH d, chunks_to_delete, collect(CASE WHEN other_connections = 0 THEN entity ELSE null END) as orphaned_entities
-        // Delete the document, its chunks, and the orphaned entities
-        DETACH DELETE d
-        FOREACH (c IN chunks_to_delete | DETACH DELETE c)
-        FOREACH (e IN [o IN orphaned_entities WHERE o IS NOT NULL] | DETACH DELETE e)
+        MATCH (d:Document {id: $document_id})
+        OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
+        DETACH DELETE d, c
         """
         await self.driver.execute_query(query, document_id=document_id, database_=self.database)
-        logger.info(f"Successfully deleted document {document_id} and cleaned up orphaned entities.")
+        logger.info(f"Successfully deleted document {document_id} and its chunks.")
+
+    async def garbage_collect_orphaned_entities(self):
+        """
+        Finds and deletes orphaned entities in batches using APOC.
+        An orphan is an entity with no connections to any chunks.
+        """
+        # This query uses apoc.periodic.iterate for scalable batch processing.
+        # It finds all entities that are not mentioned by any chunk and deletes them.
+        query = """
+        CALL apoc.periodic.iterate(
+            "MATCH (e:Entity) WHERE NOT (e)<-[:MENTIONS]-() RETURN e",
+            "DETACH DELETE e",
+            {batchSize: 1000, parallel: false}
+        )
+        YIELD batches, total, errorMessages
+        RETURN batches, total, errorMessages
+        """
+        try:
+            result, _, _ = await self.driver.execute_query(query, database_=self.database)
+            summary = result[0]
+            logger.info(f"Orphaned entity garbage collection complete. "
+                        f"Processed {summary['total']} entities in {summary['batches']} batches.")
+            if summary['errorMessages']:
+                logger.error(f"Errors during garbage collection: {summary['errorMessages']}")
+        except Exception as e:
+            logger.error(f"Garbage collection task failed. Ensure APOC plugin is installed. Error: {e}")
+            raise
 
     async def vector_search(self, query_embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
         """Performs a vector similarity search on chunk embeddings."""
