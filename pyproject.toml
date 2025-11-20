@@ -14,7 +14,8 @@ uvicorn = {extras = ["standard"], version = "^0.29.0"}
 pydantic-settings = "^2.2.1"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.29"}
 asyncpg = "^0.29.0" # For Postgres
-aiosqlite = "^0.20.0" # For SQLite
+alembic = "^1.13.1"
+psycopg2-binary = "^2.9.9" # For Alembic sync operations
 neo4j = "^5.20.0"
 boto3 = "^1.34.100"
 botocore = "^1.34.100"

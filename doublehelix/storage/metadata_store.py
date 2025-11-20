@@ -4,15 +4,17 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    create_engine,
     Column,
     Integer,
     String,
     DateTime,
     Enum,
     Text,
+    ForeignKey,
+    Boolean,
 )
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +45,9 @@ class Document(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    ontology_id = Column(Integer, ForeignKey('ontologies.id'), nullable=True)
+    ontology = relationship("Ontology", back_populates="documents")
+
     def __repr__(self):
         return f"<Document(id={self.id}, filename='{self.filename}', status='{self.status}')>"
 
@@ -60,11 +65,19 @@ class APIKey(Base):
     def __repr__(self):
         return f"<APIKey(id={self.id}, description='{self.description}', is_active={self.is_active})>"
 
+class Ontology(Base):
+    """Represents a dynamic ontology schema for extraction."""
+    __tablename__ = "ontologies"
 
-async def create_tables(engine):
-    """Utility function to create database tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    schema_json = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    documents = relationship("Document", back_populates="ontology")
+
+    def __repr__(self):
+        return f"<Ontology(id={self.id}, name='{self.name}')>"
 
 
 async def get_api_key_by_hash(db: AsyncSession, key_hash: str) -> APIKey | None:

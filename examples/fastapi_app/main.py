@@ -7,8 +7,11 @@ import hashlib
 import json
 import logging
 from contextlib import asynccontextmanager
+from typing import List, Any
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, BackgroundTasks
+from celery import chain
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Body
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.status import (
     HTTP_202_ACCEPTED,
@@ -19,6 +22,7 @@ from starlette.status import (
 
 import secrets
 from sqlalchemy import select, func
+from sqlalchemy.future import select
 
 from doublehelix.core.config import get_settings
 from doublehelix.core.connections import (
@@ -34,8 +38,8 @@ from doublehelix.storage.metadata_store import (
     DocumentStatus,
     get_document_by_hash,
     get_document_by_id,
-    create_tables,
     APIKey,
+    Ontology,
 )
 from doublehelix.storage.graph_store import GraphStore
 from doublehelix.rag.retriever import HybridRetriever
@@ -44,241 +48,169 @@ from doublehelix.ingestion.extractor import get_extractor
 from doublehelix.utils.logging import setup_logging
 from .tasks import process_document, delete_document_task
 
-# --- App State ---
-# Using a dictionary for app state is a simple way to manage shared resources.
+# --- App State & Pydantic Schemas ---
 app_state = {}
 
+class OntologySchema(BaseModel):
+    name: str
+    schema_json: dict[str, Any]
+
+class OntologyResponse(OntologySchema):
+    id: int
+
+# --- Lifespan Manager ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- Startup ---
+    # ... (lifespan content remains the same)
     setup_logging()
     logger = logging.getLogger(__name__)
     logger.info("DoubleHelix API starting up...")
-    
     settings = get_settings()
-    
-    # Initialize DB tables
-    await create_tables(sql_engine)
-    logger.info("SQL tables ensured.")
-
-    # Securely provision initial API key if none exist
+    logger.info("SQL schema management is now handled by Alembic.")
     async with get_db_session() as db:
         result = await db.execute(select(func.count(APIKey.id)))
         key_count = result.scalar_one()
         if key_count == 0:
-            logger.warning("No API keys found in the database. Attempting to provision from environment.")
+            logger.warning("No API keys found. Attempting to provision from environment.")
             if not settings.INITIAL_ADMIN_KEY or settings.INITIAL_ADMIN_KEY == "change-me-to-a-very-secure-secret-on-first-boot":
-                raise RuntimeError(
-                    "FATAL: No API keys in database and INITIAL_ADMIN_KEY environment variable is not set. "
-                    "Please set INITIAL_ADMIN_KEY to a secure value to provision the first key."
-                )
-            
+                raise RuntimeError("FATAL: No API keys in DB and INITIAL_ADMIN_KEY is not set.")
             key_hash = get_key_hash(settings.INITIAL_ADMIN_KEY)
-            
-            first_key = APIKey(
-                key_hash=key_hash,
-                description="Initial admin key (provisioned from env)",
-                is_active=True
-            )
+            first_key = APIKey(key_hash=key_hash, description="Initial admin key (provisioned from env)")
             db.add(first_key)
             await db.commit()
-            logger.info("Successfully provisioned initial admin API key from INITIAL_ADMIN_KEY environment variable.")
-
-    # Initialize graph constraints
+            logger.info("Successfully provisioned initial admin API key.")
     graph_store = GraphStore(await get_neo4j_driver())
     await graph_store.initialize_constraints_and_indexes()
     logger.info("Graph constraints and indexes ensured.")
-    
-    # Initialize RAG components and add to app state
     extractor = get_extractor()
     retriever = HybridRetriever(graph_store, extractor)
     app_state["generator"] = Generator(retriever)
-    
     logger.info("RAG generator initialized.")
     yield
-    # --- Shutdown ---
     logger.info("DoubleHelix API shutting down...")
     await close_connections()
     logger.info("All connections closed.")
 
+app = FastAPI(title="DoubleHelixGraphRAG API", version="1.0.0", lifespan=lifespan)
 
-app = FastAPI(
-    title="DoubleHelixGraphRAG API",
-    description="API for industrial-grade, adaptive GraphRAG.",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-# --- Dependency ---
+# --- Dependencies ---
 def get_generator() -> Generator:
     return app_state["generator"]
 
-# --- Endpoints ---
+# --- Ontology Endpoints ---
+@app.post("/ontologies", response_model=OntologyResponse, status_code=201, dependencies=[Depends(get_api_key)])
+async def create_ontology(ontology_data: OntologySchema, db: AsyncSession = Depends(get_db_session)):
+    new_ontology = Ontology(name=ontology_data.name, schema_json=ontology_data.schema_json)
+    db.add(new_ontology)
+    await db.commit()
+    await db.refresh(new_ontology)
+    return new_ontology
 
+@app.get("/ontologies", response_model=List[OntologyResponse], dependencies=[Depends(get_api_key)])
+async def list_ontologies(db: AsyncSession = Depends(get_db_session)):
+    result = await db.execute(select(Ontology))
+    return result.scalars().all()
+
+@app.get("/ontologies/{ontology_id}", response_model=OntologyResponse, dependencies=[Depends(get_api_key)])
+async def get_ontology(ontology_id: int, db: AsyncSession = Depends(get_db_session)):
+    ontology = await db.get(Ontology, ontology_id)
+    if not ontology:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Ontology not found.")
+    return ontology
+
+# --- Document & RAG Endpoints ---
 @app.post("/upload", status_code=HTTP_202_ACCEPTED, dependencies=[Depends(get_api_key)])
 async def upload_document(
-    background_tasks: BackgroundTasks,
+    ontology_id: int | None = None,
     file: UploadFile = File(...)
 ):
-    """
-    Accepts a document, saves it, and triggers the async ingestion pipeline.
-    Returns a job_id to track the document's status.
-    """
     s3_client = get_s3_client()
     settings = get_settings()
-    
-    # Read file content and calculate hash
     contents = await file.read()
     file_hash = hashlib.sha256(contents).hexdigest()
 
     async with get_db_session() as db:
-        existing_doc = await get_document_by_hash(db, file_hash)
-        if existing_doc:
-            raise HTTPException(
-                status_code=HTTP_409_CONFLICT,
-                detail=f"Document with same content already exists with ID: {existing_doc.id}",
-            )
-
-        # Upload to S3
+        if await get_document_by_hash(db, file_hash):
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Document with same content already exists.")
+        if ontology_id and not await db.get(Ontology, ontology_id):
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=f"Ontology with id {ontology_id} not found.")
+        
         s3_path = f"{settings.S3_BUCKET_NAME}/{file_hash}_{file.filename}"
         bucket, key = s3_path.split('/', 1)
         s3_client.put_object(Bucket=bucket, Key=key, Body=contents)
 
-        # Create metadata entry
         new_doc = Document(
             filename=file.filename,
             document_hash=file_hash,
             s3_path=s3_path,
             status=DocumentStatus.PENDING,
+            ontology_id=ontology_id,
         )
         db.add(new_doc)
         await db.commit()
         await db.refresh(new_doc)
 
-        # Trigger background task
-        background_tasks.add_task(process_document.delay, document_id=new_doc.id)
-
+        process_document.delay(document_id=new_doc.id)
         return {"job_id": new_doc.id, "status": "PENDING", "detail": "Document ingestion started."}
-
-@app.get("/status/{job_id}", dependencies=[Depends(get_api_key)])
-async def get_ingestion_status(job_id: int):
-    """Retrieves the current status of a document ingestion job."""
-    async with get_db_session() as db:
-        doc = await get_document_by_id(db, job_id)
-        if not doc:
-            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Job ID not found.")
-        
-        return {
-            "job_id": doc.id,
-            "filename": doc.filename,
-            "status": doc.status.value,
-            "last_updated": doc.updated_at,
-            "error": doc.error_log
-        }
-
-@app.post("/query", dependencies=[Depends(get_api_key)])
-async def query_rag(
-    query: str,
-    generator: Generator = Depends(get_generator)
-):
-    """
-    Accepts a query, performs RAG, and streams the response.
-    Source documents are included in the 'X-Sources' header.
-    """
-    streamer, sources = await generator.rag_query_with_sources(query)
-    
-    # Format sources for header
-    source_header = []
-    for src in sources:
-        source_header.append({
-            "document_id": src.get("document_id"),
-            "chunk_id": src.get("chunk_id"),
-            "score": src.get("score"),
-        })
-
-    headers = {"X-Sources": json.dumps(source_header)}
-    return StreamingResponse(streamer, media_type="text/plain", headers=headers)
-
-@app.delete("/documents/{document_id}", status_code=HTTP_202_ACCEPTED, dependencies=[Depends(get_api_key)])
-async def delete_document(document_id: int, background_tasks: BackgroundTasks):
-    """
-    Triggers the asynchronous deletion of a document and all its associated data.
-    """
-    async with get_db_session() as db:
-        doc = await get_document_by_id(db, document_id)
-        if not doc:
-            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Document ID not found.")
-        
-    background_tasks.add_task(delete_document_task.delay, document_id=document_id)
-    return {"job_id": document_id, "status": "DELETING", "detail": "Document deletion process initiated."}
-
-from celery import chain
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
-from starlette.status import (
-    HTTP_202_ACCEPTED,
-    HTTP_400_BAD_REQUEST,
-    HTTP_404_NOT_FOUND,
-    HTTP_409_CONFLICT,
-)
-
-from doublehelix.core.config import get_settings
-# ... (imports are condensed for brevity, ensure `chain` is added)
-
-# ... (code before the endpoint)
 
 @app.put("/documents/{document_id}", status_code=HTTP_202_ACCEPTED, dependencies=[Depends(get_api_key)])
 async def update_document(
     document_id: int,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    ontology_id: int | None = None,
 ):
-    """
-    Updates a document by securely chaining the deletion of the old document
-    with the ingestion of the new one.
-    """
     async with get_db_session() as db:
-        doc = await get_document_by_id(db, document_id)
-        if not doc:
+        if not await db.get(Document, document_id):
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Document ID not found.")
+        if ontology_id and not await db.get(Ontology, ontology_id):
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=f"Ontology with id {ontology_id} not found.")
 
-    # Ingest the new document metadata first
     s3_client = get_s3_client()
     settings = get_settings()
     contents = await file.read()
     file_hash = hashlib.sha256(contents).hexdigest()
 
     async with get_db_session() as db:
-        existing_doc = await get_document_by_hash(db, file_hash)
-        if existing_doc:
-            raise HTTPException(
-                status_code=HTTP_409_CONFLICT,
-                detail=f"New document content is identical to existing document ID: {existing_doc.id}",
-            )
-        
-        s3_path = f"{settings.S3_BUCKET_NAME}/{file_hash}_{file.filename}"
-        bucket, key = s3_path.split('/', 1)
-        s3_client.put_object(Bucket=bucket, Key=key, Body=contents)
-
         new_doc = Document(
             filename=file.filename,
             document_hash=file_hash,
-            s3_path=s3_path,
+            s3_path=f"{settings.S3_BUCKET_NAME}/{file_hash}_{file.filename}",
             status=DocumentStatus.PENDING,
+            ontology_id=ontology_id,
         )
         db.add(new_doc)
         await db.commit()
         await db.refresh(new_doc)
         
-        # Create a Celery chain: delete the old doc, then process the new one.
-        # This guarantees sequential execution and avoids race conditions.
-        update_chain = chain(
-            delete_document_task.s(document_id=document_id),
-            process_document.s(document_id=new_doc.id)
-        )
+        s3_client.put_object(Bucket=settings.S3_BUCKET_NAME, Key=f"{file_hash}_{file.filename}", Body=contents)
+        
+        update_chain = chain(delete_document_task.s(document_id=document_id), process_document.s(document_id=new_doc.id))
         update_chain.delay()
     
-    return {
-        "detail": "Document update process initiated.",
-        "old_document_id": document_id,
-        "new_job_id": new_doc.id
-    }
+    return {"detail": "Document update process initiated.", "old_document_id": document_id, "new_job_id": new_doc.id}
+
+@app.get("/status/{job_id}", dependencies=[Depends(get_api_key)])
+async def get_ingestion_status(job_id: int):
+    # ... (endpoint content remains the same)
+    async with get_db_session() as db:
+        doc = await get_document_by_id(db, job_id)
+        if not doc:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Job ID not found.")
+        return {"job_id": doc.id, "filename": doc.filename, "status": doc.status.value, "last_updated": doc.updated_at, "error": doc.error_log, "ontology_id": doc.ontology_id}
+
+@app.post("/query", dependencies=[Depends(get_api_key)])
+async def query_rag(query: str, generator: Generator = Depends(get_generator)):
+    # ... (endpoint content remains the same)
+    streamer, sources = await generator.rag_query_with_sources(query)
+    source_header = [{"document_id": src.get("document_id"), "chunk_id": src.get("chunk_id"), "score": src.get("score")} for src in sources]
+    headers = {"X-Sources": json.dumps(source_header)}
+    return StreamingResponse(streamer, media_type="text/plain", headers=headers)
+
+@app.delete("/documents/{document_id}", status_code=HTTP_202_ACCEPTED, dependencies=[Depends(get_api_key)])
+async def delete_document(document_id: int):
+    # ... (endpoint content remains the same, but remove BackgroundTasks)
+    async with get_db_session() as db:
+        if not await get_document_by_id(db, document_id):
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Document ID not found.")
+    delete_document_task.delay(document_id=document_id)
+    return {"job_id": document_id, "status": "DELETING", "detail": "Document deletion process initiated."}

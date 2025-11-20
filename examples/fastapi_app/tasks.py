@@ -49,6 +49,11 @@ def handle_dead_letter(request, exc, traceback):
 
 # --- Main Ingestion Task ---
 
+from sqlalchemy.orm import selectinload
+from doublehelix.storage.metadata_store import Document, DocumentStatus, update_document_status, get_document_by_id, Ontology
+
+# ... (other imports)
+
 @shared_task(
     name="tasks.process_document",
     bind=True,
@@ -59,14 +64,12 @@ def handle_dead_letter(request, exc, traceback):
 )
 def process_document(self, document_id: int):
     """
-    The main asynchronous task for ingesting a single document.
-    Orchestrates parsing, chunking, embedding, extraction, and storage.
+    The main asynchronous task for ingesting a single document, now ontology-aware.
+    Orchestrates parsing, chunking, embedding, and dynamic extraction.
     """
     logger.info(f"Starting ingestion process for document_id: {document_id}")
 
     try:
-        # These instances are created inside the task to ensure they are
-        # process-safe and connections are handled correctly by Celery forks.
         graph_store = GraphStore(get_neo4j_driver())
         doc_parser = parser.parse_document
         doc_chunker = chunker.get_chunker()
@@ -76,54 +79,65 @@ def process_document(self, document_id: int):
 
         async def run_async_pipeline():
             async with get_db_session() as db:
-                # 1. Fetch metadata and update status
-                doc = await get_document_by_id(db, document_id)
+                # 1. Fetch metadata and ontology, then update status
+                query = select(Document).options(selectinload(Document.ontology)).filter(Document.id == document_id)
+                result = await db.execute(query)
+                doc = result.scalars().one_or_none()
+
                 if not doc:
                     raise ValueError(f"Document with ID {document_id} not found.")
                 await update_document_status(db, document_id, DocumentStatus.PROCESSING)
+                
+                ontology_schema = doc.ontology.schema_json if doc.ontology else None
 
-                # 2. Get file from S3
                 with NamedTemporaryFile(suffix=f"_{doc.filename}") as temp_file:
                     get_file_from_s3(doc.s3_path, temp_file)
-                    
-                    # 3. Parse and Chunk
                     text_content = doc_parser(temp_file, doc.filename)
                     chunks = doc_chunker.chunk(text_content)
                     
                     if not chunks:
-                        logger.warning(f"No chunks were created for document {document_id}. Skipping.")
+                        logger.warning(f"No chunks created for document {document_id}. Skipping.")
                         await update_document_status(db, document_id, DocumentStatus.COMPLETED)
                         return
 
-                    # 4. Embed Chunks
                     chunk_texts = [c['text'] for c in chunks]
                     embeddings = await doc_embedder.embed_all(chunk_texts)
                     for i, c in enumerate(chunks):
                         c['embedding'] = embeddings[i]
 
-                    # 5. Extract Entities & Relations
-                    entities, relations = await doc_extractor.extract_from_all_chunks(chunks)
-                    
-                    # 6. Resolve Entities
-                    id_map = await doc_resolver.resolve_and_map(entities)
-                    resolved_relations = doc_resolver.remap_relations(relations, id_map)
-                    
-                    # Create a set of unique canonical entities to add to the graph
-                    canonical_entities = []
-                    seen_ids = set()
-                    for entity in entities:
-                        canonical_id = id_map.get(entity['id'])
-                        if canonical_id not in seen_ids:
-                             canonical_entities.append({"id": canonical_id, "name": entity['name'], "type": entity['type']})
-                             seen_ids.add(canonical_id)
-
-                    # 7. Store in Graph
+                    # Store document and chunks (base ingestion)
                     await graph_store.add_document_node(doc.id, doc.filename)
                     await graph_store.add_chunks(doc.id, chunks)
-                    if canonical_entities and resolved_relations:
-                        await graph_store.add_entities_and_relations(canonical_entities, resolved_relations)
 
-                # 8. Final status update
+                    # 5. Dynamic, ontology-driven extraction
+                    if ontology_schema:
+                        logger.info(f"Processing document {doc.id} with ontology '{doc.ontology.name}' (id: {doc.ontology.id})")
+                        entities, relations = await doc_extractor.extract_from_all_chunks(chunks, ontology_schema)
+                        
+                        # 6. Validate extractions against the ontology
+                        from doublehelix.ingestion.validator import Validator
+                        validator = Validator(ontology_schema)
+                        validated_entities, validated_relations = validator.validate_and_filter(entities, relations)
+                        
+                        if validated_entities:
+                            # 7. Resolve validated entities
+                            id_map = await doc_resolver.resolve_and_map(validated_entities)
+                            resolved_relations = doc_resolver.remap_relations(validated_relations, id_map)
+                            
+                            canonical_entities = []
+                            seen_ids = set()
+                            for entity in validated_entities:
+                                canonical_id = id_map.get(entity.id)
+                                if canonical_id and canonical_id not in seen_ids:
+                                     canonical_entities.append({"id": canonical_id, "name": entity['name'], "type": entity['type']})
+                                     seen_ids.add(canonical_id)
+
+                            # 8. Store validated and resolved data in Graph
+                            if canonical_entities:
+                                await graph_store.add_entities_and_relations(canonical_entities, resolved_relations)
+                    else:
+                        logger.warning(f"No ontology linked to document {doc.id}. Skipping entity/relation extraction.")
+
                 await update_document_status(db, document_id, DocumentStatus.COMPLETED)
                 logger.info(f"Successfully completed ingestion for document_id: {document_id}")
 
@@ -131,14 +145,13 @@ def process_document(self, document_id: int):
         asyncio.run(run_async_pipeline())
 
     except Exception as exc:
+        # ... (error handling remains the same)
         logger.error(f"Ingestion failed for document {document_id}. Error: {exc}", exc_info=True)
         try:
-            # If max retries are exceeded, move to dead letter queue
             self.retry(exc=exc, link_error=handle_dead_letter.s(kwargs={'task_name': self.name, 'doc_id': document_id}))
         except MaxRetriesExceededError:
-            # This block is executed locally if retries are exhausted
-            # The DLQ task will be called by Celery broker
             pass
+
 
 
 @shared_task(name="tasks.delete_document")

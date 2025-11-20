@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: doublehelix-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-doublehelix}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-doublehelix}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   neo4j:
     image: neo4j:5.20-enterprise
     container_name: doublehelix-neo4j
@@ -56,27 +73,26 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: doublehelix-api
-    command: uvicorn examples.fastapi_app.main:app --host 0.0.0.0 --port 8000
+    command: bash -c "alembic upgrade head && uvicorn examples.fastapi_app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     env_file:
       - ../.env
     environment:
-      # Override hostnames for services within Docker network
-      - METADATA_STORE_URL=sqlite+aiosqlite:///./doublehelix.db # Use file-based for simplicity in compose
+      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-doublehelix}
       - NEO4J_URI=bolt://neo4j:7687
       - S3_ENDPOINT_URL=http://minio:9000
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
     depends_on:
+      postgres:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
-    volumes:
-      - ../doublehelix.db:/app/doublehelix.db
 
   worker:
     build:
@@ -87,7 +103,7 @@ services:
     env_file:
       - ../.env
     environment:
-      - METADATA_STORE_URL=sqlite+aiosqlite:///./doublehelix.db
+      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-doublehelix}
       - NEO4J_URI=bolt://neo4j:7687
       - S3_ENDPOINT_URL=http://minio:9000
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -95,10 +111,11 @@ services:
     depends_on:
       api:
         condition: service_started
-    volumes:
-      - ../doublehelix.db:/app/doublehelix.db
+      postgres:
+        condition: service_healthy
 
 volumes:
+  postgres_data:
   neo4j_data:
   neo4j_plugins:
   redis_data:

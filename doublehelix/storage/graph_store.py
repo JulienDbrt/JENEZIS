@@ -88,40 +88,46 @@ class GraphStore:
 
     async def add_entities_and_relations(self, entities: List[Dict], relations: List[Dict]):
         """
-        Idempotently adds entities and relationships extracted from text.
+        Idempotently adds entities and relationships using dynamic labels for nodes
+        based on the entity type from the ontology.
         - entities: [{'id', 'name', 'type'}]
         - relations: [{'source_id', 'target_id', 'type', 'chunk_id'}]
         """
-        # Batch-add entities
-        entity_query = """
+        # This operation is broken into two parts for clarity and robustness.
+        
+        # 1. Merge Nodes with Dynamic Labels using APOC
+        # We give each node a base 'Entity' label plus its specific type label.
+        node_query = """
         UNWIND $entities as entity_data
-        MERGE (e:Entity {canonical_id: entity_data.id})
-        ON CREATE SET
-            e.name = entity_data.name,
-            e.type = entity_data.type,
-            e.created_at = datetime()
+        // Use apoc.merge.node to handle dynamic labels from the entity type
+        CALL apoc.merge.node(['Entity', entity_data.type], {canonical_id: entity_data.id}) YIELD node
+        ON CREATE SET node.name = entity_data.name, node.created_at = datetime()
+        ON MATCH SET node.name = entity_data.name
         """
-        await self.driver.execute_query(entity_query, entities=entities, database_=self.database)
-
-        # Batch-add relationships and link to chunks
-        relation_query = """
-        UNWIND $relations as rel_data
-        MATCH (source:Entity {canonical_id: rel_data.source_id})
-        MATCH (target:Entity {canonical_id: rel_data.target_id})
-        MATCH (chunk:Chunk {id: rel_data.chunk_id})
-        // Create the dynamic relationship between entities
-        CALL apoc.create.relationship(source, rel_data.type, {}, target) YIELD rel
-        // Link the chunk to the entities it mentions
-        MERGE (chunk)-[:MENTIONS]->(source)
-        MERGE (chunk)-[:MENTIONS]->(target)
-        """
-        # Note: apoc.create.relationship requires the APOC plugin to be installed in Neo4j.
         try:
-            await self.driver.execute_query(relation_query, relations=relations, database_=self.database)
+            await self.driver.execute_query(node_query, entities=entities, database_=self.database)
         except Exception as e:
-            logger.error(f"Failed to create relationships. Ensure APOC plugin is installed. Error: {e}")
-            # Provide a fallback or raise the error
+            logger.error(f"Failed to merge nodes with dynamic labels. Ensure APOC plugin is installed. Error: {e}")
             raise
+
+        # 2. Merge Relationships between the now-existing nodes
+        if relations:
+            relation_query = """
+            UNWIND $relations as rel_data
+            MATCH (source:Entity {canonical_id: rel_data.source_id})
+            MATCH (target:Entity {canonical_id: rel_data.target_id})
+            MATCH (chunk:Chunk {id: rel_data.chunk_id})
+            // Create the dynamic relationship, also with APOC for safety
+            CALL apoc.create.relationship(source, rel_data.type, {}, target) YIELD rel
+            // Link the chunk to the entities it mentions
+            MERGE (chunk)-[:MENTIONS]->(source)
+            MERGE (chunk)-[:MENTIONS]->(target)
+            """
+            try:
+                await self.driver.execute_query(relation_query, relations=relations, database_=self.database)
+            except Exception as e:
+                logger.error(f"Failed to create relationships. Error: {e}")
+                raise
 
     async def delete_document_and_associated_data(self, document_id: int):
         """

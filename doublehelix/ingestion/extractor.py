@@ -31,22 +31,28 @@ class ExtractionResult(BaseModel):
     entities: List[ExtractedEntity]
     relations: List[ExtractedRelation]
 
-# System prompt to instruct the LLM
-SYSTEM_PROMPT = f"""
-You are an expert knowledge graph extractor. Your task is to identify entities and their relationships from the provided text.
-You must follow these rules:
-1.  **Identify Entities**: Find all significant entities (people, organizations, products, locations, concepts).
-2.  **Assign Canonical IDs**: Create a unique, simple, uppercase, snake_case identifier for each entity (e.g., 'ELON_MUSK', 'TESLA_MOTORS').
-3.  **Identify Relationships**: Find explicit relationships between the identified entities.
-4.  **Format Output**: Respond ONLY with a valid JSON object that conforms to the following Pydantic model:
-    ```json
-    {{
-      "entities": [{{ "id": "string", "name": "string", "type": "string" }}],
-      "relations": [{{ "source": "string", "target": "string", "type": "string" }}]
-    }}
-    ```
-5.  If no entities or relations are found, return an empty list for the corresponding key. Do not explain.
-"""
+def _create_dynamic_prompt(ontology_schema: Dict[str, Any]) -> str:
+    """Generates a system prompt based on a dynamic ontology schema."""
+    entity_types = ontology_schema.get("entity_types", [])
+    relation_types = ontology_schema.get("relation_types", [])
+
+    if not entity_types:
+        return "" # Cannot extract without entity types
+
+    prompt = (
+        "You are an expert knowledge graph extractor. Your task is to identify entities and their relationships from the provided text "
+        "according to a strict, user-defined ontology.\n"
+        "Follow these rules:\n"
+        "1.  **Identify Entities**: Find all significant entities. Entities MUST be one of the following types: "
+        f"**{', '.join(entity_types)}**.\n"
+        "2.  **Assign Canonical IDs**: Create a unique, simple, uppercase, snake_case identifier for each entity (e.g., 'ELON_MUSK', 'TESLA_MOTORS').\n"
+        "3.  **Identify Relationships**: Find explicit relationships between the identified entities. Relationships MUST be one of the following types: "
+        f"**{', '.join(relation_types) if relation_types else 'NONE'}**.\n"
+        "4.  **Format Output**: Respond ONLY with a valid JSON object that conforms to the following Pydantic model:\n"
+        '    ```json\n    {\n      "entities": [{ "id": "string", "name": "string", "type": "string" }],\n      "relations": [{ "source": "string", "target": "string", "type": "string" }]\n    }\n    ```\n'
+        "5.  If no entities or relations are found, return an empty list for the corresponding key. Do not explain."
+    )
+    return prompt
 
 class Extractor:
     def __init__(self):
@@ -67,18 +73,23 @@ class Extractor:
         else:
             raise ValueError(f"Unsupported LLM provider for extraction: {self.provider}")
 
-    async def extract_from_chunk(self, chunk_text: str) -> ExtractionResult:
-        """Extracts entities and relations from a single text chunk."""
-        if not chunk_text.strip():
+    async def extract_from_chunk(self, chunk_text: str, ontology_schema: Dict[str, Any]) -> ExtractionResult:
+        """Extracts entities and relations from a single text chunk based on a dynamic ontology."""
+        if not chunk_text.strip() or not ontology_schema:
+            return ExtractionResult(entities=[], relations=[])
+        
+        system_prompt = _create_dynamic_prompt(ontology_schema)
+        if not system_prompt:
+            logger.warning("Skipping extraction due to empty ontology schema.")
             return ExtractionResult(entities=[], relations=[])
 
         try:
-            cost_tracker.estimate_cost(self.model, SYSTEM_PROMPT + chunk_text, "input")
+            cost_tracker.estimate_cost(self.model, system_prompt + chunk_text, "input")
 
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": chunk_text}
                 ],
                 temperature=0.0,
@@ -89,7 +100,7 @@ class Extractor:
             cost_tracker.estimate_cost(self.model, completion, "output")
             
             result = ExtractionResult.model_validate_json(completion)
-            logger.info(f"Extracted {len(result.entities)} entities and {len(result.relations)} relations.")
+            logger.info(f"Extracted {len(result.entities)} entities and {len(result.relations)} relations using ontology.")
             return result
 
         except Exception as e:
@@ -98,13 +109,16 @@ class Extractor:
             return ExtractionResult(entities=[], relations=[])
 
     async def extract_from_all_chunks(
-        self, chunks: List[Dict[str, Any]]
+        self, chunks: List[Dict[str, Any]], ontology_schema: Dict[str, Any]
     ) -> Tuple[List[Dict], List[Dict]]:
         """
         Processes all chunks in parallel to extract entities and relations.
         Returns a tuple of (all_entities, all_relations).
         """
-        tasks = [self.extract_from_chunk(chunk['text']) for chunk in chunks]
+        if not ontology_schema:
+            return [], []
+
+        tasks = [self.extract_from_chunk(chunk['text'], ontology_schema) for chunk in chunks]
         results = await asyncio.gather(*tasks)
 
         all_entities = {}
