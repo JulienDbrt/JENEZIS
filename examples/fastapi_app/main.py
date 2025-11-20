@@ -55,32 +55,34 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
     logger.info("DoubleHelix API starting up...")
     
+    settings = get_settings()
+    
     # Initialize DB tables
     await create_tables(sql_engine)
     logger.info("SQL tables ensured.")
 
-    # Provision initial API key if none exist
+    # Securely provision initial API key if none exist
     async with get_db_session() as db:
         result = await db.execute(select(func.count(APIKey.id)))
         key_count = result.scalar_one()
         if key_count == 0:
-            logger.warning("No API keys found in the database. Provisioning a new one.")
-            new_key = secrets.token_hex(32)
-            key_hash = get_key_hash(new_key)
+            logger.warning("No API keys found in the database. Attempting to provision from environment.")
+            if not settings.INITIAL_ADMIN_KEY or settings.INITIAL_ADMIN_KEY == "change-me-to-a-very-secure-secret-on-first-boot":
+                raise RuntimeError(
+                    "FATAL: No API keys in database and INITIAL_ADMIN_KEY environment variable is not set. "
+                    "Please set INITIAL_ADMIN_KEY to a secure value to provision the first key."
+                )
+            
+            key_hash = get_key_hash(settings.INITIAL_ADMIN_KEY)
             
             first_key = APIKey(
                 key_hash=key_hash,
-                description="Initial admin key",
+                description="Initial admin key (provisioned from env)",
                 is_active=True
             )
             db.add(first_key)
             await db.commit()
-            
-            logger.critical("="*80)
-            logger.critical("THIS IS THE ONLY TIME YOUR NEW ADMIN API KEY WILL BE SHOWN")
-            logger.critical(f"  Bearer Token: {new_key}")
-            logger.critical("Save this key securely. You will need it to interact with the API.")
-            logger.critical("="*80)
+            logger.info("Successfully provisioned initial admin API key from INITIAL_ADMIN_KEY environment variable.")
 
     # Initialize graph constraints
     graph_store = GraphStore(await get_neo4j_driver())
@@ -210,35 +212,42 @@ async def delete_document(document_id: int, background_tasks: BackgroundTasks):
     background_tasks.add_task(delete_document_task.delay, document_id=document_id)
     return {"job_id": document_id, "status": "DELETING", "detail": "Document deletion process initiated."}
 
+from celery import chain
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
+from starlette.status import (
+    HTTP_202_ACCEPTED,
+    HTTP_400_BAD_REQUEST,
+    HTTP_404_NOT_FOUND,
+    HTTP_409_CONFLICT,
+)
+
+from doublehelix.core.config import get_settings
+# ... (imports are condensed for brevity, ensure `chain` is added)
+
+# ... (code before the endpoint)
+
 @app.put("/documents/{document_id}", status_code=HTTP_202_ACCEPTED, dependencies=[Depends(get_api_key)])
 async def update_document(
     document_id: int,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...)
 ):
     """
-    Updates a document by deleting the old one and ingesting the new one.
-    This is a simple implementation; a more sophisticated one might do an in-place update.
+    Updates a document by securely chaining the deletion of the old document
+    with the ingestion of the new one.
     """
     async with get_db_session() as db:
         doc = await get_document_by_id(db, document_id)
         if not doc:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Document ID not found.")
 
-    # 1. Trigger deletion of the old document
-    background_tasks.add_task(delete_document_task.delay, document_id=document_id)
-    
-    # 2. Ingest the new document (similar to /upload)
-    # A small delay might be needed to let the delete task start, or use Celery chains.
-    await asyncio.sleep(1) 
-    
+    # Ingest the new document metadata first
     s3_client = get_s3_client()
     settings = get_settings()
     contents = await file.read()
     file_hash = hashlib.sha256(contents).hexdigest()
 
     async with get_db_session() as db:
-        # Check if this content hash already exists under a different ID
         existing_doc = await get_document_by_hash(db, file_hash)
         if existing_doc:
             raise HTTPException(
@@ -260,7 +269,13 @@ async def update_document(
         await db.commit()
         await db.refresh(new_doc)
         
-        background_tasks.add_task(process_document.delay, document_id=new_doc.id)
+        # Create a Celery chain: delete the old doc, then process the new one.
+        # This guarantees sequential execution and avoids race conditions.
+        update_chain = chain(
+            delete_document_task.s(document_id=document_id),
+            process_document.s(document_id=new_doc.id)
+        )
+        update_chain.delay()
     
     return {
         "detail": "Document update process initiated.",

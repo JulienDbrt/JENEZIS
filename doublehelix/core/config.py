@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables and .env file.
     """
     # API KEYS & SECURITY
+    INITIAL_ADMIN_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     OPENROUTER_API_KEY: str | None = None
