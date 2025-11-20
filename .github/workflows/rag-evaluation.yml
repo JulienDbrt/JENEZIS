@@ -1,0 +1,80 @@
+name: RAG Evaluation CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-and-evaluate:
+    runs-on: ubuntu-latest
+    
+    services:
+      # This block is useful if you need to ensure Docker is available.
+      # On GitHub's default runners, it's already there.
+      docker:
+        image: docker:dind
+        options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Create .env file for services
+        run: |
+          cp .env.example .env
+          # Override settings for the CI environment
+          sed -i 's/localhost/0.0.0.0/g' .env
+          echo "API_SECRET_KEY=${{ secrets.DH_API_SECRET_KEY_CI }}" >> .env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          # Use a fixed, simple password for CI Neo4j
+          sed -i 's/your-neo4j-password/ci-password/g' .env
+        env:
+          # It's good practice to use secrets for any keys.
+          # These would need to be configured in the GitHub repository settings.
+          DH_API_SECRET_KEY_CI: "a-secure-secret-for-ci"
+
+      - name: Start services with Docker Compose
+        run: |
+          docker-compose -f docker/docker-compose.yml up -d --build
+          echo "Waiting for services to become healthy..."
+          # A simple sleep is often brittle. A more robust solution would be a script
+          # that polls the healthcheck endpoints of each service. For this example,
+          # the built-in healthchecks in the compose file + a generous sleep is a good start.
+          sleep 60 
+
+      - name: Verify Docker containers are running
+        run: docker ps -a
+
+      - name: Run Pytest (Unit & Integration Tests)
+        run: poetry run pytest tests/unit/ tests/integration/
+        env:
+          API_SECRET_KEY: "a-secure-secret-for-ci"
+          # Add other env vars needed for tests
+
+      - name: Run RAGAS Evaluation
+        id: ragas_eval
+        # The script will exit with 1 if evaluation fails, causing the step to fail.
+        run: |
+          poetry run python scripts/run_ragas_eval.py
+        env:
+          API_URL: "http://localhost:8000"
+          API_SECRET_KEY: "a-secure-secret-for-ci"
+          # Pass RAGAS thresholds to the script
+          RAGAS_FAITHFULNESS_THRESHOLD: ${{ vars.RAGAS_FAITHFULNESS_THRESHOLD || 0.85 }}
+          RAGAS_CONTEXT_RECALL_THRESHOLD: ${{ vars.RAGAS_CONTEXT_RECALL_THRESHOLD || 0.80 }}
+          
+      - name: Stop services
+        if: always() # Always run this step, even if previous steps fail
+        run: docker-compose -f docker/docker-compose.yml down

@@ -1,0 +1,25 @@
+[
+  {
+    "question": "What is the main advantage of using a hybrid retrieval approach in RAG?",
+    "contexts": [
+      "Vector search is excellent for finding semantically similar content, but it can miss explicit connections. Graph-based retrieval excels at traversing known relationships. A hybrid model combines the strengths of both, using vector search for semantic relevance and graph search for contextual, factual precision.",
+      "Reciprocal Rank Fusion (RRF) is a technique used to combine results from different retrieval systems. It provides a robust way to merge ranked lists by prioritizing documents that appear high up in multiple lists."
+    ],
+    "ground_truth": "The main advantage of a hybrid retrieval approach is that it combines the semantic relevance capabilities of vector search with the contextual and factual precision of graph-based retrieval, leveraging the strengths of both methods."
+  },
+  {
+    "question": "Who is the CEO of Tesla?",
+    "contexts": [
+      "Tesla, Inc. is an American multinational automotive and clean energy company headquartered in Austin, Texas. Elon Musk is the co-founder and CEO of Tesla.",
+      "SpaceX, founded by Elon Musk, is a separate private company and is not owned by Tesla."
+    ],
+    "ground_truth": "Elon Musk is the CEO of Tesla."
+  },
+  {
+      "question": "What technology does the DoubleHelix library use for asynchronous tasks?",
+      "contexts": [
+          "The DoubleHelixGraphRAG library is built for production use. It leverages Celery for managing asynchronous ingestion pipelines, with Redis acting as the message broker and result backend. This ensures that document processing is scalable and resilient."
+      ],
+      "ground_truth": "The DoubleHelix library uses Celery and Redis for asynchronous task management."
+  }
+]

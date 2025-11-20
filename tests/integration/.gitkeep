@@ -1,0 +1,3 @@
+# This directory is for integration tests.
+# Example: test_ingestion_pipeline.py which would test the full flow
+# from file upload to data appearing in the graph.
