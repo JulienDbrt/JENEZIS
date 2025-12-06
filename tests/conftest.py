@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
 import pytest
@@ -21,7 +21,60 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 # ============================================================================
-# Database Fixtures
+# Test Data
+# ============================================================================
+
+# Test skills data for mocking database responses
+TEST_SKILLS = {
+    "python": 1,
+    "javascript": 2,
+    "react": 3,
+    "programming_languages": 4,
+    "frontend": 5,
+    "data_science": 6,
+    "machine_learning": 7,
+}
+
+TEST_ALIASES = {
+    "python": "python",
+    "py": "python",
+    "python3": "python",
+    "javascript": "javascript",
+    "js": "javascript",
+    "ecmascript": "javascript",
+    "react": "react",
+    "reactjs": "react",
+    "react.js": "react",
+    "ml": "machine_learning",
+    "machine learning": "machine_learning",
+}
+
+TEST_HIERARCHY = {
+    "python": ["programming_languages"],
+    "javascript": ["programming_languages"],
+    "react": ["javascript", "frontend"],
+    "machine_learning": ["data_science"],
+}
+
+# Test entity data
+TEST_ENTITIES = {
+    "google": {"canonical_id": "google", "canonical_name": "Google", "entity_type": "COMPANY"},
+    "google inc": {"canonical_id": "google", "canonical_name": "Google", "entity_type": "COMPANY"},
+    "google llc": {"canonical_id": "google", "canonical_name": "Google", "entity_type": "COMPANY"},
+    "microsoft": {"canonical_id": "microsoft", "canonical_name": "Microsoft Corporation", "entity_type": "COMPANY"},
+    "microsoft corp": {"canonical_id": "microsoft", "canonical_name": "Microsoft Corporation", "entity_type": "COMPANY"},
+    "msft": {"canonical_id": "microsoft", "canonical_name": "Microsoft Corporation", "entity_type": "COMPANY"},
+    "bnp": {"canonical_id": "bnp_paribas", "canonical_name": "BNP Paribas", "entity_type": "COMPANY"},
+    "bnp paribas": {"canonical_id": "bnp_paribas", "canonical_name": "BNP Paribas", "entity_type": "COMPANY"},
+    "polytechnique": {"canonical_id": "ecole_polytechnique", "canonical_name": "École Polytechnique", "entity_type": "SCHOOL"},
+    "x": {"canonical_id": "ecole_polytechnique", "canonical_name": "École Polytechnique", "entity_type": "SCHOOL"},
+    "massachusetts institute of technology": {"canonical_id": "mit", "canonical_name": "MIT", "entity_type": "SCHOOL"},
+    "mit": {"canonical_id": "mit", "canonical_name": "MIT", "entity_type": "SCHOOL"},
+}
+
+
+# ============================================================================
+# Database Fixtures (SQLite for legacy tests)
 # ============================================================================
 
 
@@ -223,55 +276,56 @@ def temp_entity_db() -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def harmonizer_client(temp_ontology_db, monkeypatch) -> TestClient:
-    """Create a test client for the Harmonizer API with test database."""
-    monkeypatch.setenv("ONTOLOGY_DB", temp_ontology_db)
-
-    # Configure test authentication BEFORE importing modules
+def harmonizer_client(monkeypatch) -> TestClient:
+    """Create a test client for the Harmonizer API with mocked database."""
     import os
 
     os.environ["API_AUTH_TOKEN"] = "test_token_123"
 
-    # Monkey patch the DB_FILE in the module
+    # Import and patch the API module
     import api.main
-    from api.main import app, load_ontology_cache
+    from api.main import app
 
-    api.main.DB_FILE = temp_ontology_db
+    # Set up in-memory caches with test data
+    api.main.ALIAS_CACHE = TEST_ALIASES.copy()
+    api.main.SKILLS_CACHE = TEST_SKILLS.copy()
+    api.main.HIERARCHY_CACHE = TEST_HIERARCHY.copy()
 
     # Reinitialize auth middleware with test token
     from api.auth import auth
 
     auth.auth_token = "test_token_123"
     auth.is_enabled = True
-
-    # Reload cache with test data
-    load_ontology_cache()
 
     return TestClient(app)
 
 
 @pytest.fixture
-def entity_resolver_client(temp_entity_db, monkeypatch) -> TestClient:
-    """Create a test client for the Entity Resolver API with test database."""
-    # Configure test authentication BEFORE importing modules
+def entity_resolver_client(monkeypatch) -> TestClient:
+    """Create a test client for the Entity Resolver API with mocked database."""
     import os
 
     os.environ["API_AUTH_TOKEN"] = "test_token_123"
 
-    # Monkey patch the DB_FILE in the module
+    # Import and patch the API module
     import entity_resolver.api
-    from entity_resolver.api import app, load_cache
+    from entity_resolver.api import app
 
-    entity_resolver.api.DB_FILE = temp_entity_db
+    # Set up in-memory cache with test data
+    entity_resolver.api.ENTITY_ALIAS_CACHE = TEST_ENTITIES.copy()
+    entity_resolver.api.CANONICAL_ENTITIES = {
+        "google": {"canonical_name": "Google", "entity_type": "COMPANY"},
+        "microsoft": {"canonical_name": "Microsoft Corporation", "entity_type": "COMPANY"},
+        "bnp_paribas": {"canonical_name": "BNP Paribas", "entity_type": "COMPANY"},
+        "ecole_polytechnique": {"canonical_name": "École Polytechnique", "entity_type": "SCHOOL"},
+        "mit": {"canonical_name": "MIT", "entity_type": "SCHOOL"},
+    }
 
     # Reinitialize auth middleware with test token
     from api.auth import auth
 
     auth.auth_token = "test_token_123"
     auth.is_enabled = True
-
-    # Reload cache with test data
-    load_cache()
 
     return TestClient(app)
 
