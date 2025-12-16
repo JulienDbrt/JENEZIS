@@ -1,17 +1,170 @@
-name: RAG Evaluation CI
+name: Security & Evaluation CI
 
 on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
+
+env:
+  PYTHON_VERSION: '3.11'
+  PYTEST_PARALLELISM: 4
 
 jobs:
-  test-and-evaluate:
+  # ============================================================================
+  # Stage 1: Unit Tests (Fast, No Services Required)
+  # ============================================================================
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Run Unit Tests with Coverage
+        run: |
+          poetry run pytest tests/unit/ \
+            -n ${{ env.PYTEST_PARALLELISM }} \
+            --tb=short \
+            --timeout=60 \
+            --cov=doublehelix \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -v
+
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage.xml
+          flags: unit-tests
+          fail_ci_if_error: false
+
+  # ============================================================================
+  # Stage 2: Adversarial Security Tests (With Mocks)
+  # ============================================================================
+  adversarial-tests:
+    name: Adversarial Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: unit-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Run Adversarial Tests (Parallel)
+        run: |
+          poetry run pytest tests/adversarial/ \
+            -n ${{ env.PYTEST_PARALLELISM }} \
+            --tb=short \
+            --timeout=120 \
+            --ignore=tests/adversarial/test_race_conditions.py \
+            -v
+
+      - name: Run Race Condition Tests (Sequential)
+        run: |
+          poetry run pytest tests/adversarial/test_race_conditions.py \
+            --tb=short \
+            --timeout=300 \
+            -v
+
+  # ============================================================================
+  # Stage 3: Static Security Analysis
+  # ============================================================================
+  security-scan:
+    name: Security Scan (SAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: unit-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Security Tools
+        run: |
+          pip install bandit safety
+
+      - name: Run Bandit (SAST)
+        run: |
+          bandit -r doublehelix/ -ll -ii -f json -o bandit-report.json || true
+          bandit -r doublehelix/ -ll -ii
+        continue-on-error: true
+
+      - name: Check Dependencies (Safety)
+        run: |
+          pip install poetry
+          poetry export -f requirements.txt --without-hashes | safety check --stdin
+        continue-on-error: true
+
+      - name: Upload Bandit Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+          retention-days: 30
+
+  # ============================================================================
+  # Stage 4: Integration Tests (Full Stack Required)
+  # ============================================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [unit-tests, adversarial-tests]
+
     services:
-      # This block is useful if you need to ensure Docker is available.
-      # On GitHub's default runners, it's already there.
       docker:
         image: docker:dind
         options: --privileged
@@ -23,58 +176,222 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
 
       - name: Install Poetry
         run: pip install poetry
 
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
       - name: Install dependencies
         run: poetry install --no-root
 
-      - name: Create .env file for services
+      - name: Create CI Environment
         run: |
           cp .env.example .env
-          # Override settings for the CI environment
           sed -i 's/localhost/0.0.0.0/g' .env
-          echo "API_SECRET_KEY=${{ secrets.DH_API_SECRET_KEY_CI }}" >> .env
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
-          # Use a fixed, simple password for CI Neo4j
+          echo "INITIAL_ADMIN_KEY=${{ secrets.DH_API_SECRET_KEY_CI || 'ci-test-key-12345' }}" >> .env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || 'sk-test' }}" >> .env
           sed -i 's/your-neo4j-password/ci-password/g' .env
-        env:
-          # It's good practice to use secrets for any keys.
-          # These would need to be configured in the GitHub repository settings.
-          DH_API_SECRET_KEY_CI: "a-secure-secret-for-ci"
 
-      - name: Start services with Docker Compose
+      - name: Start Services
         run: |
           docker-compose -f docker/docker-compose.yml up -d --build
           echo "Waiting for services to become healthy..."
-          # A simple sleep is often brittle. A more robust solution would be a script
-          # that polls the healthcheck endpoints of each service. For this example,
-          # the built-in healthchecks in the compose file + a generous sleep is a good start.
-          sleep 60 
+          sleep 60
 
-      - name: Verify Docker containers are running
+      - name: Verify Services
         run: docker ps -a
 
-      - name: Run Pytest (Unit & Integration Tests)
-        run: poetry run pytest tests/unit/ tests/integration/
+      - name: Run Integration Tests
+        run: |
+          poetry run pytest tests/integration/ \
+            --tb=short \
+            --timeout=180 \
+            -v
         env:
-          API_SECRET_KEY: "a-secure-secret-for-ci"
-          # Add other env vars needed for tests
+          API_SECRET_KEY: ${{ secrets.DH_API_SECRET_KEY_CI || 'ci-test-key-12345' }}
+
+      - name: Stop Services
+        if: always()
+        run: docker-compose -f docker/docker-compose.yml down
+
+  # ============================================================================
+  # Stage 5: Coverage Gate
+  # ============================================================================
+  coverage-gate:
+    name: Coverage Gate (80%)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [unit-tests, adversarial-tests]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Run All Tests with Coverage
+        run: |
+          poetry run pytest tests/unit/ tests/adversarial/ \
+            -n ${{ env.PYTEST_PARALLELISM }} \
+            --ignore=tests/adversarial/test_race_conditions.py \
+            --cov=doublehelix \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+  # ============================================================================
+  # Stage 6: RAGAS Evaluation (Only on main branch)
+  # ============================================================================
+  ragas-evaluation:
+    name: RAGAS Quality Evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: integration-tests
+    if: github.ref == 'refs/heads/main'
+
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Create CI Environment
+        run: |
+          cp .env.example .env
+          sed -i 's/localhost/0.0.0.0/g' .env
+          echo "INITIAL_ADMIN_KEY=${{ secrets.DH_API_SECRET_KEY_CI }}" >> .env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          sed -i 's/your-neo4j-password/ci-password/g' .env
+
+      - name: Start Services
+        run: |
+          docker-compose -f docker/docker-compose.yml up -d --build
+          sleep 60
 
       - name: Run RAGAS Evaluation
-        id: ragas_eval
-        # The script will exit with 1 if evaluation fails, causing the step to fail.
-        run: |
-          poetry run python scripts/run_ragas_eval.py
+        run: poetry run python scripts/run_ragas_eval.py
         env:
           API_URL: "http://localhost:8000"
-          API_SECRET_KEY: "a-secure-secret-for-ci"
-          # Pass RAGAS thresholds to the script
-          RAGAS_FAITHFULNESS_THRESHOLD: ${{ vars.RAGAS_FAITHFULNESS_THRESHOLD || 0.85 }}
-          RAGAS_CONTEXT_RECALL_THRESHOLD: ${{ vars.RAGAS_CONTEXT_RECALL_THRESHOLD || 0.80 }}
-          
-      - name: Stop services
-        if: always() # Always run this step, even if previous steps fail
+          API_SECRET_KEY: ${{ secrets.DH_API_SECRET_KEY_CI }}
+          RAGAS_FAITHFULNESS_THRESHOLD: ${{ vars.RAGAS_FAITHFULNESS_THRESHOLD || '0.85' }}
+          RAGAS_CONTEXT_RECALL_THRESHOLD: ${{ vars.RAGAS_CONTEXT_RECALL_THRESHOLD || '0.80' }}
+
+      - name: Stop Services
+        if: always()
+        run: docker-compose -f docker/docker-compose.yml down
+
+  # ============================================================================
+  # Stage 7: Load Testing (Manual Trigger Only)
+  # ============================================================================
+  load-tests:
+    name: Load Tests (Locust)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch'
+
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry & Dependencies
+        run: |
+          pip install poetry
+          poetry install --no-root
+
+      - name: Create CI Environment
+        run: |
+          cp .env.example .env
+          sed -i 's/localhost/0.0.0.0/g' .env
+          echo "INITIAL_ADMIN_KEY=${{ secrets.DH_API_SECRET_KEY_CI }}" >> .env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+
+      - name: Start Services
+        run: |
+          docker-compose -f docker/docker-compose.yml up -d --build
+          sleep 60
+
+      - name: Run Load Tests (100 users, 5 min)
+        run: |
+          poetry run locust \
+            -f tests/load/locustfile.py \
+            --host=http://localhost:8000 \
+            --users=100 \
+            --spawn-rate=10 \
+            --run-time=5m \
+            --headless \
+            --csv=loadtest-results
+        env:
+          API_SECRET_KEY: ${{ secrets.DH_API_SECRET_KEY_CI }}
+          TEST_ONTOLOGY_ID: "1"
+
+      - name: Upload Load Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: loadtest-results*.csv
+          retention-days: 30
+
+      - name: Stop Services
+        if: always()
         run: docker-compose -f docker/docker-compose.yml down

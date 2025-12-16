@@ -2,7 +2,7 @@
 Cost tracking for LLM operations using tiktoken and known model prices.
 """
 import logging
-from typing import Literal
+from typing import Literal, List
 
 import tiktoken
 
