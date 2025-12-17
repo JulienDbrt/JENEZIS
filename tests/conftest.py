@@ -10,7 +10,7 @@ This module provides shared fixtures for:
 """
 import os
 
-# Set test environment variables BEFORE any doublehelix imports
+# Set test environment variables BEFORE any jenezis imports
 os.environ.setdefault("NEO4J_PASSWORD", "test-password")
 os.environ.setdefault("S3_AWS_ACCESS_KEY_ID", "test-access-key")
 os.environ.setdefault("S3_AWS_SECRET_ACCESS_KEY", "test-secret-key")
@@ -34,7 +34,7 @@ import httpx
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from doublehelix.storage.metadata_store import Base
+from jenezis.storage.metadata_store import Base
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ def patch_db_session(test_db_session, monkeypatch):
         yield test_db_session
 
     monkeypatch.setattr(
-        "doublehelix.core.connections.get_db_session",
+        "jenezis.core.connections.get_db_session",
         mock_get_db_session
     )
     return test_db_session
@@ -319,7 +319,7 @@ def mock_neo4j_driver(cypher_recorder, monkeypatch):
         return driver
 
     monkeypatch.setattr(
-        "doublehelix.core.connections.get_neo4j_driver",
+        "jenezis.core.connections.get_neo4j_driver",
         mock_get_driver
     )
 
@@ -400,13 +400,13 @@ def mock_s3_client(monkeypatch) -> MockS3Client:
     Critical for testing path traversal and file upload vulnerabilities.
     """
     mock_client = MockS3Client()
-    mock_client.create_bucket(Bucket="doublehelix-documents")
+    mock_client.create_bucket(Bucket="jenezis-documents")
 
     def mock_get_s3_client():
         return mock_client
 
     monkeypatch.setattr(
-        "doublehelix.core.connections.get_s3_client",
+        "jenezis.core.connections.get_s3_client",
         mock_get_s3_client
     )
 

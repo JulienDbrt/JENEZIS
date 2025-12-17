@@ -3,7 +3,7 @@ version: '3.8'
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: doublehelix-postgres
+    container_name: jenezis-postgres
     ports:
       - "5432:5432"
     volumes:
@@ -11,16 +11,16 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-      - POSTGRES_DB=${POSTGRES_DB:-doublehelix}
+      - POSTGRES_DB=${POSTGRES_DB:-jenezis}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-doublehelix}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-jenezis}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   neo4j:
     image: neo4j:5.20-enterprise
-    container_name: doublehelix-neo4j
+    container_name: jenezis-neo4j
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -39,7 +39,7 @@ services:
 
   redis:
     image: redis:7.2-alpine
-    container_name: doublehelix-redis
+    container_name: jenezis-redis
     ports:
       - "6379:6379"
     volumes:
@@ -52,7 +52,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: doublehelix-minio
+    container_name: jenezis-minio
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -72,14 +72,14 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: doublehelix-api
+    container_name: jenezis-api
     command: bash -c "alembic upgrade head && uvicorn examples.fastapi_app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     env_file:
       - ../.env
     environment:
-      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-doublehelix}
+      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-jenezis}
       - NEO4J_URI=bolt://neo4j:7687
       - S3_ENDPOINT_URL=http://minio:9000
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -98,12 +98,12 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: doublehelix-worker
+    container_name: jenezis-worker
     command: celery -A examples.fastapi_app.celery_config worker --loglevel=INFO -c 1
     env_file:
       - ../.env
     environment:
-      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-doublehelix}
+      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-jenezis}
       - NEO4J_URI=bolt://neo4j:7687
       - S3_ENDPOINT_URL=http://minio:9000
       - CELERY_BROKER_URL=redis://redis:6379/0

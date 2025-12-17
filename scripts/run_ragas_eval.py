@@ -1,7 +1,7 @@
 """
 Script for running RAG evaluation using Ragas.
 This script is designed to be called from a CI/CD pipeline.
-It queries a running instance of the DoubleHelix API, evaluates the
+It queries a running instance of the JENEZIS API, evaluates the
 responses against a ground truth dataset, and exits with a status code
 indicating success or failure based on performance thresholds.
 """

@@ -3,14 +3,14 @@ Security Module Unit Tests
 
 Tests for API key authentication and authorization.
 
-Target file: doublehelix/core/security.py
+Target file: jenezis/core/security.py
 """
 import hashlib
 import time
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from doublehelix.core.security import get_key_hash, get_api_key
+from jenezis.core.security import get_key_hash, get_api_key
 
 
 pytestmark = pytest.mark.unit
@@ -97,7 +97,7 @@ class TestAPIKeyAuthentication:
         from fastapi import HTTPException
 
         # Mock request without Authorization header
-        with patch("doublehelix.core.security.get_db_session") as mock_get_db:
+        with patch("jenezis.core.security.get_db_session") as mock_get_db:
             mock_get_db.return_value.__aenter__ = AsyncMock()
             mock_get_db.return_value.__aexit__ = AsyncMock()
 

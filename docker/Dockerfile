@@ -36,7 +36,7 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 
 # Copy the application source code
-COPY ./doublehelix ./doublehelix
+COPY ./jenezis ./jenezis
 COPY ./examples ./examples
 COPY ./alembic ./alembic
 COPY ./alembic.ini ./alembic.ini

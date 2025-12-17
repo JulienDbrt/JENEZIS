@@ -1,21 +1,51 @@
-Copyright (c) 2025 Julien Debert
+Business Source License 1.1
 
-All Rights Reserved.
+Parameters
 
-PROPRIETARY AND CONFIDENTIAL
+Licensor:             Julien Dabert
+Licensed Work:        JENEZIS
+                      The Licensed Work is (c) 2025 Julien Dabert
 
-This software is the proprietary property of Julien Debert.
-You may not use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and you may not permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Additional Use Grant:
+    The Licensor hereby grants you the right to make production use of the Licensed Work
+    if any of the following conditions are met:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+    - Your organization's annual revenue does not exceed USD 100,000
+    - You are not offering a commercially available product or service that
+        competes with the Licensor's products or services
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Definitions:
+    "Production Use" means any use of the Licensed Work in a production environment,
+        including but not limited to:
+
+    - Deploying the Licensed Work to serve production traffic
+    - Using the Licensed Work to process real customer data
+    - Incorporating the Licensed Work into a commercial product or service
+    - Using the Licensed Work to generate revenue directly or indirectly
+
+"Competing Product or Service" means any product or service that:
+
+    - Provides substantially similar functionality to the Licensed Work
+    - Offers the Licensed Work as a hosted or managed service
+    - Incorporates the Licensed Work into a broader product or service that competes
+        with the Licensor's current or reasonably anticipated products or services
+
+"Non-Production Use" means:
+
+    - Development and testing in isolated environments
+    - Academic research and educational purposes
+    - Evaluation of the Licensed Work for potential purchase of a commercial license
+    - Personal, non-commercial projects where the Licensed Work is not used to generate revenue
+
+Change Date:          2029-12-15
+
+Change License:       Apache License, Version 2.0
+
+For information about alternative licensing arrangements for the Software,
+please contact: <jdabert@sigilum.fr>
+
+Notice
+
+The Business Source License (this document, or the "License") is not an Open
+Source license. However, the Licensed Work will eventually be made available
+under an Open Source License, as stated in this License.

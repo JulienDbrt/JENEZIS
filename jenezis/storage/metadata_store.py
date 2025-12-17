@@ -12,7 +12,7 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pgvector.sqlalchemy import Vector as VECTOR
 
-from doublehelix.core.config import get_settings
+from jenezis.core.config import get_settings
 
 settings = get_settings()
 Base = declarative_base()

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DoubleHelixGraphRAG is a neuro-symbolic GraphRAG framework implementing the "Jenezis" architecture. It combines a **Canonical Store** (PostgreSQL+pgvector for source of truth) with a **Projection Graph** (Neo4j for reasoning) orchestrated by LLM-driven extraction and resolution.
+JENEZIS is a neuro-symbolic GraphRAG framework implementing the "Jenezis" architecture. It combines a **Canonical Store** (PostgreSQL+pgvector for source of truth) with a **Projection Graph** (Neo4j for reasoning) orchestrated by LLM-driven extraction and resolution.
 
 ## Commands
 
@@ -26,7 +26,7 @@ pytest tests/adversarial/ -v
 pytest tests/integration/ -v
 
 # All tests with coverage (80% minimum)
-pytest tests/unit/ tests/adversarial/ --cov=doublehelix --cov-fail-under=80
+pytest tests/unit/ tests/adversarial/ --cov=jenezis --cov-fail-under=80
 
 # Single test file
 pytest tests/adversarial/test_cypher_injection.py -v
@@ -53,7 +53,7 @@ locust -f tests/load/locustfile.py --host=http://localhost:8000 \
 ### Security Scanning
 ```bash
 # Static analysis with Bandit
-bandit -r doublehelix/ -ll -ii
+bandit -r jenezis/ -ll -ii
 
 # Dependency vulnerability check
 poetry export -f requirements.txt --without-hashes | safety check --stdin
@@ -78,15 +78,15 @@ poetry run celery -A examples.fastapi_app.celery_config worker --loglevel=INFO
 ## Architecture
 
 ### Neuro-Symbolic Pipeline ("Harmonizer")
-The ingestion flow in `doublehelix/ingestion/`:
+The ingestion flow in `jenezis/ingestion/`:
 1. **Parser** (`parser.py`) → **Chunker** (`chunker.py`) → **Embedder** (`embedder.py`)
 2. **Extractor** (`extractor.py`): LLM extracts entities/relations constrained by `DomainConfig` ontology
 3. **Validator** (`validator.py`): Filters extracted data against ontology rules
 4. **Resolver** (`resolver.py`): Maps entities to canonical store (exact match → vector similarity → enrichment queue)
 
 ### Data Stores
-- **PostgreSQL+pgvector** (`doublehelix/storage/metadata_store.py`): Canonical nodes, aliases, domain configs, documents, API keys, enrichment queue
-- **Neo4j** (`doublehelix/storage/graph_store.py`): Projection graph with Document→Chunk→Entity relationships, uses APOC for dynamic labels
+- **PostgreSQL+pgvector** (`jenezis/storage/metadata_store.py`): Canonical nodes, aliases, domain configs, documents, API keys, enrichment queue
+- **Neo4j** (`jenezis/storage/graph_store.py`): Projection graph with Document→Chunk→Entity relationships, uses APOC for dynamic labels
 - **MinIO/S3**: Raw document storage
 - **Redis**: Celery message broker
 
@@ -103,7 +103,7 @@ The ingestion flow in `doublehelix/ingestion/`:
 - `delete_document_task`: Cascading deletion
 - `run_garbage_collection`: Orphan entity cleanup
 
-### RAG Pipeline (`doublehelix/rag/`)
+### RAG Pipeline (`jenezis/rag/`)
 - **Retriever** (`retriever.py`): Hybrid search combining vector similarity with LLM-planned Cypher queries, fused via Reciprocal Rank Fusion
 - **Generator** (`generator.py`): Streaming LLM responses with source citations
 
@@ -115,7 +115,7 @@ The ingestion flow in `doublehelix/ingestion/`:
 
 ## Configuration
 
-All settings in `doublehelix/core/config.py` via Pydantic Settings. Key env vars:
+All settings in `jenezis/core/config.py` via Pydantic Settings. Key env vars:
 - `LLM_PROVIDER`: "openai" | "anthropic" | "openrouter"
 - `EXTRACTION_MODEL`: Model for entity extraction (default: gpt-3.5-turbo)
 - `GENERATOR_MODEL`: Model for RAG generation (default: gpt-4-turbo)

@@ -3,12 +3,12 @@ Chunker Unit Tests
 
 Tests for text chunking functionality and edge cases.
 
-Target file: doublehelix/ingestion/chunker.py
+Target file: jenezis/ingestion/chunker.py
 """
 import pytest
 from unittest.mock import MagicMock, patch
 
-from doublehelix.ingestion.chunker import Chunker, get_chunker
+from jenezis.ingestion.chunker import Chunker, get_chunker
 
 
 pytestmark = pytest.mark.unit
@@ -20,7 +20,7 @@ class TestChunkerInitialization:
     @pytest.mark.xfail(reason="Settings mock structure differs from actual implementation")
     def test_default_initialization(self):
         """Chunker should initialize with default settings."""
-        with patch("doublehelix.ingestion.chunker.get_settings") as mock_settings:
+        with patch("jenezis.ingestion.chunker.get_settings") as mock_settings:
             mock_settings.return_value.CHUNK_SIZE = 512
             mock_settings.return_value.CHUNK_OVERLAP = 50
 
@@ -221,7 +221,7 @@ class TestGetChunkerFactory:
 
     def test_get_chunker_returns_chunker(self):
         """get_chunker should return a Chunker instance."""
-        with patch("doublehelix.ingestion.chunker.get_settings") as mock_settings:
+        with patch("jenezis.ingestion.chunker.get_settings") as mock_settings:
             mock_settings.return_value.CHUNK_SIZE = 512
             mock_settings.return_value.CHUNK_OVERLAP = 50
 
@@ -232,7 +232,7 @@ class TestGetChunkerFactory:
     @pytest.mark.xfail(reason="Settings mock structure differs from actual implementation")
     def test_get_chunker_uses_settings(self):
         """get_chunker should use settings for configuration."""
-        with patch("doublehelix.ingestion.chunker.get_settings") as mock_settings:
+        with patch("jenezis.ingestion.chunker.get_settings") as mock_settings:
             mock_settings.return_value.CHUNK_SIZE = 256
             mock_settings.return_value.CHUNK_OVERLAP = 25
 

@@ -1,1 +1,1 @@
-"""Load tests for DoubleHelixGraphRAG."""
+"""Load tests for JENEZISGraphRAG."""

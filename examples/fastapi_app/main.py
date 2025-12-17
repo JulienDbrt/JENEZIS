@@ -1,5 +1,5 @@
 """
-Complete FastAPI application for DoubleHelixGraphRAG.
+Complete FastAPI application for JENEZIS.
 Provides endpoints for document upload, status checking, querying, and management.
 """
 import asyncio
@@ -25,8 +25,8 @@ from sqlalchemy import select, func
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from doublehelix.core.config import get_settings
-from doublehelix.core.connections import (
+from jenezis.core.config import get_settings
+from jenezis.core.connections import (
     close_connections,
     get_db_session,
     get_db_session_dep,
@@ -34,8 +34,8 @@ from doublehelix.core.connections import (
     get_neo4j_driver,
     sql_engine,
 )
-from doublehelix.core.security import get_api_key, get_key_hash
-from doublehelix.storage.metadata_store import (
+from jenezis.core.security import get_api_key, get_key_hash
+from jenezis.storage.metadata_store import (
     Document,
     DocumentStatus,
     get_document_by_hash,
@@ -43,10 +43,10 @@ from doublehelix.storage.metadata_store import (
     APIKey,
     Ontology,
 )
-from doublehelix.storage.graph_store import GraphStore
-from doublehelix.rag.retriever import HybridRetriever
-from doublehelix.rag.generator import Generator
-from doublehelix.utils.logging import setup_logging
+from jenezis.storage.graph_store import GraphStore
+from jenezis.rag.retriever import HybridRetriever
+from jenezis.rag.generator import Generator
+from jenezis.utils.logging import setup_logging
 from .tasks import process_document, delete_document_task
 
 # --- App State & Pydantic Schemas ---
@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     # ... (lifespan content remains the same)
     setup_logging()
     logger = logging.getLogger(__name__)
-    logger.info("DoubleHelix API starting up...")
+    logger.info("JENEZIS API starting up...")
     settings = get_settings()
     logger.info("SQL schema management is now handled by Alembic.")
     async with get_db_session() as db:
@@ -87,11 +87,11 @@ async def lifespan(app: FastAPI):
     app_state["generator"] = Generator(retriever)
     logger.info("RAG generator initialized.")
     yield
-    logger.info("DoubleHelix API shutting down...")
+    logger.info("JENEZIS API shutting down...")
     await close_connections()
     logger.info("All connections closed.")
 
-app = FastAPI(title="DoubleHelixGraphRAG API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="JENEZIS API", version="2.0.0", lifespan=lifespan)
 
 # --- Dependencies ---
 def get_generator() -> Generator:

@@ -1,10 +1,12 @@
-# DoubleHelixGraphRAG - Jenezis Architecture
+# JENEZIS
 
-**Version 2.0.0**
+**Neuro-Symbolic GraphRAG Framework**
+
+**Version 2.0.0** | **License: BSL 1.1**
 
 ---
 
-**DoubleHelixGraphRAG** is a neuro-symbolic, industrial-grade framework for building advanced knowledge systems. Inspired by the "Jenezis" architecture, this library moves beyond simple RAG to create a self-learning, auditable, and dynamically configurable reasoning engine.
+**JENEZIS** is a neuro-symbolic, industrial-grade framework for building advanced knowledge systems. This library moves beyond simple RAG to create a self-learning, auditable, and dynamically configurable reasoning engine.
 
 The core principle is the separation of a **Canonical Store** (the "source of truth") from a **Projection Graph** (the "reasoning engine"), all orchestrated by a neuro-symbolic ingestion pipeline.
 
@@ -122,19 +124,20 @@ The system will use its LLM planner to translate this into a Cypher query (e.g.,
 
 ---
 
-### SITREP (Situation Report)
+## License
 
-*   **PROJECT:** DoubleHelixGraphRAG (Jenezis Architecture)
-*   **STATUS:** Operational. All development phases based on the new architecture are complete and pushed to the remote repository.
-*   **CORE ARCHITECTURE:**
-    *   **Symbolic Foundation:** PostgreSQL 16 with pgvector serves as the canonical store for all entities, aliases, and domain configurations. Schema is managed by Alembic.
-    *   **Ingestion Pipeline ("Harmonizer"):** A neuro-symbolic pipeline processes documents. It uses dynamic `DomainConfigs` to constrain a LLM extractor, resolves entities against the canonical store (exact + vector search), and validates the output.
-    *   **Active Learning:** Unresolved entities are automatically added to an `enrichment_queue`. A dedicated Celery worker processes this queue to enrich the canonical store, making the system auto-apprenant.
-    *   **Reasoning Engine:** The Neo4j graph is a projection of the canonical store. The RAG retriever uses an LLM to plan and generate dynamic, multi-hop Cypher queries to answer complex questions.
-*   **CURRENT CAPABILITIES:**
-    *   Dynamic, API-driven ontology management.
-    *   Robust, scalable, and ontology-aware document ingestion.
-    *   Automated learning and expansion of the knowledge base.
-    *   Advanced, reasoning-based query answering (not just semantic search).
-*   **NEXT ACTIONS:** Awaiting further directives.
-```
+JENEZIS is licensed under the **Business Source License 1.1 (BSL 1.1)**.
+
+- **Free for**: Organizations with annual revenue under $100,000, non-commercial use, academic research, and evaluation purposes.
+- **Change Date**: December 15, 2029 (converts to Apache 2.0)
+- **Commercial licensing**: Contact <jdabert@sigilum.fr>
+
+See [LICENSE](LICENSE) for full details.
+
+---
+
+## Contact
+
+For commercial licensing, support, or inquiries:
+- Email: <jdabert@sigilum.fr>
+- Project: SIGILUM

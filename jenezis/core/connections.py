@@ -12,14 +12,14 @@ from neo4j import AsyncGraphDatabase
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-from doublehelix.core.config import get_settings
+from jenezis.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # --- Celery App ---
 celery_app = Celery(
-    "doublehelix",
+    "jenezis",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=["examples.fastapi_app.tasks"],

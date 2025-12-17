@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 
 import tiktoken
 
-from doublehelix.core.config import get_settings
+from jenezis.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

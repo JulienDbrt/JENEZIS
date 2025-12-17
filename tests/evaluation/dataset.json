@@ -16,10 +16,10 @@
     "ground_truth": "Elon Musk is the CEO of Tesla."
   },
   {
-      "question": "What technology does the DoubleHelix library use for asynchronous tasks?",
+      "question": "What technology does the JENEZIS library use for asynchronous tasks?",
       "contexts": [
-          "The DoubleHelixGraphRAG library is built for production use. It leverages Celery for managing asynchronous ingestion pipelines, with Redis acting as the message broker and result backend. This ensures that document processing is scalable and resilient."
+          "The JENEZISGraphRAG library is built for production use. It leverages Celery for managing asynchronous ingestion pipelines, with Redis acting as the message broker and result backend. This ensures that document processing is scalable and resilient."
       ],
-      "ground_truth": "The DoubleHelix library uses Celery and Redis for asynchronous task management."
+      "ground_truth": "The JENEZIS library uses Celery and Redis for asynchronous task management."
   }
 ]

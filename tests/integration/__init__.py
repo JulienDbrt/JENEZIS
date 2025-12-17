@@ -1,1 +1,1 @@
-"""Integration tests for DoubleHelixGraphRAG."""
+"""Integration tests for JENEZISGraphRAG."""

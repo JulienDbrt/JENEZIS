@@ -7,8 +7,8 @@ from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.status import HTTP_403_FORBIDDEN
 
-from doublehelix.core.connections import get_db_session_dep
-from doublehelix.storage.metadata_store import get_api_key_by_hash
+from jenezis.core.connections import get_db_session_dep
+from jenezis.storage.metadata_store import get_api_key_by_hash
 
 logger = logging.getLogger(__name__)
 

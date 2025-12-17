@@ -8,9 +8,9 @@ These tests target race conditions in:
 - Status updates
 
 Target files:
-- doublehelix/ingestion/resolver.py (concurrent resolution)
+- jenezis/ingestion/resolver.py (concurrent resolution)
 - examples/fastapi_app/tasks.py (concurrent task execution)
-- doublehelix/storage/metadata_store.py (status updates)
+- jenezis/storage/metadata_store.py (status updates)
 """
 import asyncio
 import pytest
@@ -36,9 +36,9 @@ class TestConcurrentCanonicalNodeCreation:
         Verify that concurrent resolutions of the same entity
         don't create duplicates.
         """
-        from doublehelix.ingestion.resolver import Resolver
-        from doublehelix.ingestion.embedder import Embedder
-        from doublehelix.storage.metadata_store import CanonicalNode, NodeAlias
+        from jenezis.ingestion.resolver import Resolver
+        from jenezis.ingestion.embedder import Embedder
+        from jenezis.storage.metadata_store import CanonicalNode, NodeAlias
 
         # Create a mock embedder
         mock_embedder = MagicMock(spec=Embedder)
@@ -88,7 +88,7 @@ class TestConcurrentCanonicalNodeCreation:
         is created for a given entity name.
         """
         from sqlalchemy import select
-        from doublehelix.storage.metadata_store import CanonicalNode
+        from jenezis.storage.metadata_store import CanonicalNode
 
         # Simulate concurrent node creation attempts
         async def create_node_if_not_exists(name: str):
@@ -147,7 +147,7 @@ class TestEnrichmentQueueRaceCondition:
         Verify that an enrichment queue item is not processed by
         multiple workers simultaneously.
         """
-        from doublehelix.storage.metadata_store import (
+        from jenezis.storage.metadata_store import (
             EnrichmentQueueItem,
             EnrichmentStatus,
         )
@@ -206,7 +206,7 @@ class TestDocumentDeletionDuringIngestion:
         Verify that deleting a document during ingestion doesn't
         leave orphaned data.
         """
-        from doublehelix.storage.metadata_store import (
+        from jenezis.storage.metadata_store import (
             Document,
             DocumentStatus,
         )
@@ -248,7 +248,7 @@ class TestStatusUpdateRaceCondition:
         """
         Verify that concurrent status updates are serialized correctly.
         """
-        from doublehelix.storage.metadata_store import (
+        from jenezis.storage.metadata_store import (
             Document,
             DocumentStatus,
             update_document_status,
@@ -309,7 +309,7 @@ class TestDoubleSubmitPrevention:
         """
         Verify that rapid double-submits of the same file are handled.
         """
-        from doublehelix.storage.metadata_store import (
+        from jenezis.storage.metadata_store import (
             Document,
             DocumentStatus,
             get_document_by_hash,
@@ -379,7 +379,7 @@ class TestLockContention:
         """
         Simulate high contention scenario with many concurrent operations.
         """
-        from doublehelix.storage.metadata_store import Document, DocumentStatus
+        from jenezis.storage.metadata_store import Document, DocumentStatus
 
         num_documents = 50
         num_concurrent_ops = 100

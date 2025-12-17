@@ -10,8 +10,8 @@ from typing import List, Dict, Any, Tuple
 import openai
 from pydantic import BaseModel, Field
 
-from doublehelix.core.config import get_settings
-from doublehelix.storage.cost_tracker import cost_tracker
+from jenezis.core.config import get_settings
+from jenezis.storage.cost_tracker import cost_tracker
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

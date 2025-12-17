@@ -5,13 +5,13 @@ These tests target the lack of state machine validation in
 document status updates.
 
 Target files:
-- doublehelix/storage/metadata_store.py:107-112 (update_document_status)
-- doublehelix/storage/metadata_store.py:22-24 (DocumentStatus enum)
+- jenezis/storage/metadata_store.py:107-112 (update_document_status)
+- jenezis/storage/metadata_store.py:22-24 (DocumentStatus enum)
 """
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-from doublehelix.storage.metadata_store import (
+from jenezis.storage.metadata_store import (
     Document,
     DocumentStatus,
     update_document_status,

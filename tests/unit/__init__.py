@@ -1,1 +1,1 @@
-"""Unit tests for DoubleHelixGraphRAG components."""
+"""Unit tests for JENEZISGraphRAG components."""

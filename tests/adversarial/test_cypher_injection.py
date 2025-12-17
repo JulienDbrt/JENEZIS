@@ -6,14 +6,14 @@ dynamic labels and relationship types from LLM extraction are used
 in APOC calls without proper sanitization.
 
 Target files:
-- doublehelix/storage/graph_store.py:103 (apoc.merge.node with dynamic labels)
-- doublehelix/storage/graph_store.py:121 (apoc.create.relationship with dynamic types)
+- jenezis/storage/graph_store.py:103 (apoc.merge.node with dynamic labels)
+- jenezis/storage/graph_store.py:121 (apoc.create.relationship with dynamic types)
 """
 import re
 import pytest
 from unittest.mock import MagicMock, patch
 
-from doublehelix.storage.graph_store import GraphStore
+from jenezis.storage.graph_store import GraphStore
 
 
 pytestmark = [pytest.mark.adversarial, pytest.mark.unit]

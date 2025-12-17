@@ -7,15 +7,15 @@ import logging
 from typing import AsyncGenerator, List, Dict, Any, Tuple
 
 import openai
-from doublehelix.core.config import get_settings
-from doublehelix.rag.retriever import HybridRetriever
-from doublehelix.storage.cost_tracker import cost_tracker
+from jenezis.core.config import get_settings
+from jenezis.rag.retriever import HybridRetriever
+from jenezis.storage.cost_tracker import cost_tracker
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 GENERATOR_SYSTEM_PROMPT = """
-You are an expert Question-Answering assistant named "DoubleHelix".
+You are an expert Question-Answering assistant named "JENEZIS".
 Your task is to answer the user's question based *only* on the provided context.
 Follow these rules strictly:
 1.  Analyze the provided context documents carefully.

@@ -5,15 +5,15 @@ These tests target the vulnerability in extractor.py where
 chunk text is passed directly to the LLM without sanitization.
 
 Target files:
-- doublehelix/ingestion/extractor.py:93 (chunk_text in user message)
-- doublehelix/rag/retriever.py:96-104 (query in planner prompt)
-- doublehelix/rag/generator.py:75-79 (context in generation prompt)
+- jenezis/ingestion/extractor.py:93 (chunk_text in user message)
+- jenezis/rag/retriever.py:96-104 (query in planner prompt)
+- jenezis/rag/generator.py:75-79 (context in generation prompt)
 """
 import json
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from doublehelix.ingestion.extractor import Extractor, ExtractionResult
+from jenezis.ingestion.extractor import Extractor, ExtractionResult
 
 
 pytestmark = [pytest.mark.adversarial, pytest.mark.unit]
@@ -205,13 +205,13 @@ class TestPromptInjectionInRetriever:
             }
         })
 
-        from doublehelix.rag.retriever import HybridRetriever
-        from doublehelix.storage.graph_store import GraphStore
+        from jenezis.rag.retriever import HybridRetriever
+        from jenezis.storage.graph_store import GraphStore
 
         # Create retriever with mocked dependencies
         mock_graph_store = MagicMock(spec=GraphStore)
 
-        with patch("doublehelix.rag.retriever.get_embedder"):
+        with patch("jenezis.rag.retriever.get_embedder"):
             retriever = HybridRetriever(mock_graph_store)
 
         plan = await retriever._plan_cypher_query(payload)
@@ -259,7 +259,7 @@ class TestPromptInjectionInGenerator:
         # This test verifies that even if malicious content ends up
         # in the context, the generator's system prompt takes precedence
 
-        from doublehelix.rag.generator import GENERATOR_SYSTEM_PROMPT
+        from jenezis.rag.generator import GENERATOR_SYSTEM_PROMPT
 
         # Verify the system prompt instructs the model to stick to context
         assert "MUST be based exclusively on the information within the context" in GENERATOR_SYSTEM_PROMPT
@@ -348,7 +348,7 @@ class TestExtractionResultValidation:
             "relations": [],
         })
 
-        from doublehelix.ingestion.validator import Validator
+        from jenezis.ingestion.validator import Validator
 
         extractor = Extractor()
         ontology = sample_ontology["schema_json"]

@@ -8,9 +8,9 @@ import json
 import openai
 from typing import List, Dict, Any
 
-from doublehelix.core.config import get_settings
-from doublehelix.ingestion.embedder import get_embedder
-from doublehelix.storage.graph_store import GraphStore
+from jenezis.core.config import get_settings
+from jenezis.ingestion.embedder import get_embedder
+from jenezis.storage.graph_store import GraphStore
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

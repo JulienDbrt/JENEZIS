@@ -8,8 +8,8 @@ These tests target scenarios where data can become orphaned:
 - Enrichment queue items that never complete
 
 Target files:
-- doublehelix/storage/metadata_store.py (missing CASCADE constraints)
-- doublehelix/storage/graph_store.py (graph/DB desync)
+- jenezis/storage/metadata_store.py (missing CASCADE constraints)
+- jenezis/storage/graph_store.py (graph/DB desync)
 - examples/fastapi_app/tasks.py (partial failure scenarios)
 """
 import pytest
@@ -34,7 +34,7 @@ class TestOrphanedChunks:
         Verify that if ingestion fails after chunk creation,
         the chunks are cleaned up.
         """
-        from doublehelix.storage.graph_store import GraphStore
+        from jenezis.storage.graph_store import GraphStore
 
         graph_store = GraphStore(MagicMock())
         graph_store.driver = MagicMock()
@@ -90,7 +90,7 @@ class TestOrphanedEntities:
         """
         Verify that entities without MENTIONS relationships are detected as orphans.
         """
-        from doublehelix.storage.graph_store import GraphStore
+        from jenezis.storage.graph_store import GraphStore
 
         graph_store = GraphStore(MagicMock())
         graph_store.driver = MagicMock()
@@ -111,7 +111,7 @@ class TestOrphanedEntities:
         Verify that if entity creation partially fails, created entities
         are cleaned up.
         """
-        from doublehelix.storage.graph_store import GraphStore
+        from jenezis.storage.graph_store import GraphStore
 
         graph_store = GraphStore(MagicMock())
         graph_store.driver = MagicMock()
@@ -153,7 +153,7 @@ class TestOrphanedAliases:
         Verify that NodeAliases without a valid CanonicalNode are detected.
         """
         from sqlalchemy import select, text
-        from doublehelix.storage.metadata_store import NodeAlias, CanonicalNode
+        from jenezis.storage.metadata_store import NodeAlias, CanonicalNode
 
         # Create a canonical node
         node = CanonicalNode(
@@ -209,7 +209,7 @@ class TestOrphanedEnrichmentItems:
         """
         from datetime import datetime, timezone, timedelta
         from sqlalchemy import select
-        from doublehelix.storage.metadata_store import (
+        from jenezis.storage.metadata_store import (
             EnrichmentQueueItem,
             EnrichmentStatus,
         )
@@ -244,7 +244,7 @@ class TestOrphanedEnrichmentItems:
         """
         Verify that FAILED enrichment items have useful error information.
         """
-        from doublehelix.storage.metadata_store import (
+        from jenezis.storage.metadata_store import (
             EnrichmentQueueItem,
             EnrichmentStatus,
         )
@@ -279,11 +279,11 @@ class TestS3Orphans:
         """
         Verify that S3 objects without corresponding DB records are detected.
         """
-        from doublehelix.storage.metadata_store import Document
+        from jenezis.storage.metadata_store import Document
 
         # Store a file in S3
         mock_s3_client.put_object(
-            Bucket="doublehelix-documents",
+            Bucket="jenezis-documents",
             Key="orphan_hash_orphan_file.pdf",
             Body=b"orphan content"
         )
@@ -292,7 +292,7 @@ class TestS3Orphans:
         # This simulates a partial failure
 
         # Check for orphans by comparing S3 keys to DB records
-        s3_keys = mock_s3_client.get_stored_keys("doublehelix-documents")
+        s3_keys = mock_s3_client.get_stored_keys("jenezis-documents")
 
         from sqlalchemy import select
         result = await test_db_session.execute(select(Document.s3_path))
@@ -324,7 +324,7 @@ class TestCrossStoreConsistency:
         """
         Verify that a document exists in all stores or none.
         """
-        from doublehelix.storage.metadata_store import Document, DocumentStatus
+        from jenezis.storage.metadata_store import Document, DocumentStatus
 
         document_id = 999
 
@@ -332,7 +332,7 @@ class TestCrossStoreConsistency:
         doc = Document(
             filename="consistency_test.pdf",
             document_hash="consistency_hash",
-            s3_path="doublehelix-documents/consistency_hash_test.pdf",
+            s3_path="jenezis-documents/consistency_hash_test.pdf",
             status=DocumentStatus.COMPLETED,
             domain_config_id=1,
         )
@@ -341,7 +341,7 @@ class TestCrossStoreConsistency:
         await test_db_session.refresh(doc)
 
         # Check S3 (should NOT exist yet - we didn't upload)
-        s3_keys = mock_s3_client.get_stored_keys("doublehelix-documents")
+        s3_keys = mock_s3_client.get_stored_keys("jenezis-documents")
         s3_exists = any("consistency_hash" in key for key in s3_keys)
 
         # Check Neo4j (should NOT exist yet - we didn't create graph nodes)
@@ -363,12 +363,12 @@ class TestCrossStoreConsistency:
         Verify that delete operation removes data from all stores atomically.
         """
         # Setup: Add to all stores
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
         file_key = "delete_test_hash_file.pdf"
 
         mock_s3_client.put_object(Bucket=bucket, Key=file_key, Body=b"content")
 
-        from doublehelix.storage.metadata_store import Document, DocumentStatus
+        from jenezis.storage.metadata_store import Document, DocumentStatus
 
         doc = Document(
             filename="delete_test.pdf",
@@ -405,7 +405,7 @@ class TestGarbageCollectionEffectiveness:
         """
         Verify that garbage collection handles all types of orphans.
         """
-        from doublehelix.storage.graph_store import GraphStore
+        from jenezis.storage.graph_store import GraphStore
 
         graph_store = GraphStore(MagicMock())
         graph_store.driver = MagicMock()

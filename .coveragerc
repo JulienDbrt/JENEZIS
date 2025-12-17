@@ -1,5 +1,5 @@
 [run]
-source = doublehelix
+source = jenezis
 branch = true
 omit =
     */tests/*

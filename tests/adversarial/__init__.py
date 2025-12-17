@@ -1,1 +1,1 @@
-"""Adversarial security tests for DoubleHelixGraphRAG."""
+"""Adversarial security tests for JENEZISGraphRAG."""

@@ -10,9 +10,9 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from pgvector.sqlalchemy import Vector
 
-from doublehelix.core.config import get_settings
-from doublehelix.storage.metadata_store import CanonicalNode, NodeAlias
-from doublehelix.ingestion.embedder import Embedder
+from jenezis.core.config import get_settings
+from jenezis.storage.metadata_store import CanonicalNode, NodeAlias
+from jenezis.ingestion.embedder import Embedder
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

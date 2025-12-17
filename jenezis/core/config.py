@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ENTITY_RESOLUTION_THRESHOLD: int = 85
 
     # DATABASE & STORAGE CONFIG
-    METADATA_STORE_URL: str = "sqlite+aiosqlite:///./doublehelix.db"
+    METADATA_STORE_URL: str = "sqlite+aiosqlite:///./jenezis.db"
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str
@@ -55,6 +55,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
 

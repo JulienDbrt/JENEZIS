@@ -13,15 +13,15 @@ from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
 
-from doublehelix.core.config import get_settings
-from doublehelix.core.connections import get_db_session, get_neo4j_driver, get_s3_client
-from doublehelix.storage.metadata_store import (
+from jenezis.core.config import get_settings
+from jenezis.core.connections import get_db_session, get_neo4j_driver, get_s3_client
+from jenezis.storage.metadata_store import (
     Document, DocumentStatus, update_document_status, get_document_by_id,
     EnrichmentQueueItem, EnrichmentStatus, CanonicalNode, NodeAlias
 )
-from doublehelix.storage.graph_store import GraphStore
-from doublehelix.ingestion import parser, chunker, embedder, extractor
-from doublehelix.ingestion.resolver import Resolver
+from jenezis.storage.graph_store import GraphStore
+from jenezis.ingestion import parser, chunker, embedder, extractor
+from jenezis.ingestion.resolver import Resolver
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -68,7 +68,7 @@ def process_document(self, document_id: int):
                     await graph_store.add_document_node(doc.id, doc.filename); await graph_store.add_chunks(doc.id, chunks)
 
                     entities, relations = await extractor.get_extractor().extract_from_all_chunks(chunks, domain_config)
-                    from doublehelix.ingestion.validator import Validator
+                    from jenezis.ingestion.validator import Validator
                     validated_entities, validated_relations = Validator(domain_config).validate_and_filter(entities, relations)
                     if not validated_entities: await update_document_status(db, document_id, DocumentStatus.COMPLETED, "No valid entities extracted."); return
                     

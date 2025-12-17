@@ -1,5 +1,5 @@
 """
-Locust Load Tests for DoubleHelixGraphRAG
+Locust Load Tests for JENEZISGraphRAG
 
 Run with:
     locust -f tests/load/locustfile.py --host=http://localhost:8000
@@ -25,9 +25,9 @@ API_KEY = os.environ.get("API_SECRET_KEY", "test-api-key")
 ONTOLOGY_ID = os.environ.get("TEST_ONTOLOGY_ID", "1")
 
 
-class DoubleHelixUser(HttpUser):
+class JENEZISUser(HttpUser):
     """
-    Simulates a typical user interacting with the DoubleHelix API.
+    Simulates a typical user interacting with the JENEZIS API.
 
     Task weights represent relative frequency:
     - query_rag (3): Most common operation

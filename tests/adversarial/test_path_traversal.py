@@ -46,7 +46,7 @@ class TestPathTraversalInS3Keys:
         Verify that basic path traversal sequences are blocked or sanitized.
         """
         file_hash = hashlib.sha256(b"test content").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
 
         # Simulate the vulnerable code path
         # s3_path = f"{bucket}/{file_hash}_{filename}"
@@ -92,7 +92,7 @@ class TestPathTraversalInS3Keys:
         Verify that URL-encoded path traversal is blocked.
         """
         file_hash = hashlib.sha256(b"test").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
         s3_key = f"{file_hash}_{filename}"
 
         mock_s3_client.put_object(Bucket=bucket, Key=s3_key, Body=b"test")
@@ -120,7 +120,7 @@ class TestPathTraversalInS3Keys:
         Verify that Unicode-based path traversal is blocked.
         """
         file_hash = hashlib.sha256(b"test").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
         s3_key = f"{file_hash}_{filename}"
 
         mock_s3_client.put_object(Bucket=bucket, Key=s3_key, Body=b"test")
@@ -159,7 +159,7 @@ class TestS3KeyManipulation:
         Verify that attackers cannot access other buckets via filename.
         """
         file_hash = hashlib.sha256(b"test").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
 
         # In real S3, the bucket is separate from the key
         # but if the code constructs paths incorrectly, this could be exploited
@@ -192,7 +192,7 @@ class TestS3KeyManipulation:
         Verify that null byte injection is blocked.
         """
         file_hash = hashlib.sha256(b"test").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
 
         # Null bytes should be stripped or rejected
         s3_key = f"{file_hash}_{filename}"
@@ -232,7 +232,7 @@ class TestProtocolInjection:
         Verify that protocol prefixes in filenames are sanitized.
         """
         file_hash = hashlib.sha256(b"test").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
         s3_key = f"{file_hash}_{filename}"
 
         mock_s3_client.put_object(Bucket=bucket, Key=s3_key, Body=b"test")
@@ -272,7 +272,7 @@ class TestFilenameValidation:
     ):
         """Verify that safe filenames are accepted."""
         file_hash = hashlib.sha256(b"test").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
         s3_key = f"{file_hash}_{filename}"
 
         mock_s3_client.put_object(Bucket=bucket, Key=s3_key, Body=b"test")
@@ -304,7 +304,7 @@ class TestFilenameValidation:
         Verify that dangerous filenames are rejected or sanitized.
         """
         file_hash = hashlib.sha256(b"test").hexdigest()
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
 
         try:
             s3_key = f"{file_hash}_{filename}"
@@ -336,7 +336,7 @@ class TestS3PathConstruction:
         The vulnerable code does:
         bucket, key = s3_path.split('/', 1)
         """
-        bucket = "doublehelix-documents"
+        bucket = "jenezis-documents"
         file_hash = "abc123"
         filename = "path/to/file.pdf"  # Contains slashes
 

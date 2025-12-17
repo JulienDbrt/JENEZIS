@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "doublehelix-graphrag"
-version = "1.0.0"
-description = "Industrial-grade, lightweight, and hyper-adaptive GraphRAG library."
-authors = ["Your Name <you@example.com>"]
-license = "MIT"
+name = "jenezis"
+version = "2.0.0"
+description = "Neuro-symbolic GraphRAG framework - Industrial-grade knowledge systems"
+authors = ["Julien Dabert <jdabert@sigilum.fr>"]
+license = "BSL-1.1"
 readme = "README.md"
-packages = [{include = "doublehelix"}]
+packages = [{include = "jenezis"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
