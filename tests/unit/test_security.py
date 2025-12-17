@@ -121,16 +121,16 @@ class TestAPIKeyAuthentication:
 
         assert exc_info.value.status_code == 403
 
-    @pytest.mark.xfail(reason="Some malformed headers not rejected (lowercase 'bearer' accepted)")
     async def test_malformed_header_raises_403(self):
         """Malformed Authorization header should raise 403."""
         from fastapi import HTTPException
 
+        # These headers are malformed and should be rejected
         malformed_headers = [
-            "BearerToken",  # No space
-            "bearer token",  # Wrong case for scheme (currently accepted)
-            "  Bearer token",  # Leading spaces
-            "Bearer",  # No token
+            "BearerToken",  # No space separating scheme from token
+            "  Bearer token",  # Leading spaces (scheme becomes empty string)
+            "Bearer",  # No token after scheme
+            "Bearer ",  # Empty token after space
         ]
 
         for header in malformed_headers:
@@ -139,11 +139,31 @@ class TestAPIKeyAuthentication:
 
             assert exc_info.value.status_code == 403, f"Failed for header: {header}"
 
+    async def test_lowercase_bearer_accepted(self):
+        """RFC 7235 specifies auth-scheme is case-insensitive."""
+        from fastapi import HTTPException
+
+        # Lowercase 'bearer' is valid per RFC 7235
+        # It should get past scheme validation but fail on db lookup
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(
+            return_value=MagicMock(
+                scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))
+            )
+        )
+
+        # Should pass scheme validation but fail db lookup
+        with pytest.raises(HTTPException) as exc_info:
+            await get_api_key(api_key_header="bearer valid-token", db=mock_db)
+
+        # 403 because token not in DB, not because of scheme
+        assert exc_info.value.status_code == 403
+        assert "Invalid" in exc_info.value.detail  # Invalid API key, not invalid scheme
+
 
 class TestTimingAttackResistance:
     """Tests for timing attack resistance."""
 
-    @pytest.mark.xfail(reason="KNOWN VULNERABILITY: Timing variance too high - potential timing attack vector - see CLAUDE.md")
     async def test_response_time_consistent(self):
         """
         Response time should be relatively consistent regardless of

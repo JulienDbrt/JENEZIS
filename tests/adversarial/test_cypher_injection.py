@@ -95,9 +95,10 @@ class TestCypherInjectionViaEntityTypes:
                 entities=malicious_entities,
                 relations=[],
             )
-        except (ValueError, TypeError) as e:
-            # Good - the malicious input was rejected
-            pytest.skip(f"Input correctly rejected: {e}")
+        except (ValueError, TypeError):
+            # Good - the malicious input was correctly rejected by validation
+            # This is the expected secure behavior
+            return
 
         # If execution succeeded, verify no dangerous patterns in queries
         mock_neo4j_driver.assert_no_injection(dangerous_cypher_patterns)
@@ -175,8 +176,9 @@ class TestCypherInjectionViaRelationTypes:
                 entities=valid_entities,
                 relations=malicious_relations,
             )
-        except (ValueError, TypeError) as e:
-            pytest.skip(f"Input correctly rejected: {e}")
+        except (ValueError, TypeError):
+            # Good - the malicious input was correctly rejected by validation
+            return
 
         # Verify no dangerous patterns
         mock_neo4j_driver.assert_no_injection(dangerous_cypher_patterns)

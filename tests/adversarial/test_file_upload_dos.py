@@ -55,66 +55,67 @@ class TestFileSizeDoS:
     """
     Tests for denial of service via large file uploads.
 
-    The vulnerability: The upload endpoint calls `await file.read()`
-    without checking file size first, allowing an attacker to exhaust
-    server memory with a single request.
+    The fix: validate_upload_size() reads in chunks and enforces
+    MAX_UPLOAD_SIZE_BYTES limit before processing.
     """
 
-    @pytest.mark.xfail(reason="KNOWN VULNERABILITY: No file size limit before read() - see CLAUDE.md")
-    async def test_large_file_should_be_rejected_before_full_read(self):
+    async def test_large_file_rejected_by_validate_upload_size(self):
         """
-        Verify that files exceeding a size limit are rejected
-        without reading the entire content into memory.
+        Verify that files exceeding the size limit are rejected
+        by validate_upload_size() during chunked reading.
         """
-        # Simulate a 10GB file
-        large_file = FakeStreamingFile(
-            claimed_size=10 * 1024 * 1024 * 1024,  # 10GB
-            actual_data=b"small payload"
-        )
+        from examples.fastapi_app.main import validate_upload_size, MAX_UPLOAD_SIZE_BYTES
+        from fastapi import HTTPException
 
-        # Create an UploadFile wrapper
-        upload_file = UploadFile(
-            filename="huge_file.pdf",
-            file=large_file,
-            headers=Headers({"content-type": "application/pdf"}),
-        )
+        # Create content slightly over the limit
+        oversized_content = b"X" * (MAX_UPLOAD_SIZE_BYTES + 1)
 
-        # Mock the endpoint's file handling
-        # If the code tries to read() the entire file, it will raise MemoryError
-        try:
-            content = await upload_file.read()
-            # If we get here with the full claimed size, it's vulnerable
-            if len(content) == large_file.claimed_size:
-                pytest.fail(
-                    "VULNERABILITY: Large file was read entirely into memory! "
-                    "This enables DoS attacks."
-                )
-        except MemoryError as e:
-            # Good - the test caught the attempt to read a huge file
-            assert "DoS vulnerability" in str(e)
+        # Create a mock file
+        file = MagicMock()
+        file_io = io.BytesIO(oversized_content)
 
-    @pytest.mark.xfail(reason="KNOWN VULNERABILITY: Content-Length mismatch not validated - see CLAUDE.md")
-    async def test_content_length_mismatch_handled(self):
+        async def read(size=-1):
+            return file_io.read(size)
+
+        file.read = read
+
+        # Create a mock request with no Content-Length (to test actual size checking)
+        request = MagicMock()
+        request.headers = {}
+
+        # Should raise HTTPException 413
+        with pytest.raises(HTTPException) as exc_info:
+            await validate_upload_size(request, file)
+
+        assert exc_info.value.status_code == 413
+        assert "too large" in exc_info.value.detail.lower()
+
+    async def test_content_length_header_enforced(self):
         """
-        Verify that Content-Length header mismatches are handled.
-
-        Attack: Set Content-Length: 100 but send 10GB of data.
+        Verify that Content-Length header is checked for early rejection.
         """
-        # Create a file that claims to be small but is actually large
-        deceptive_file = FakeStreamingFile(
-            claimed_size=100,  # Claims 100 bytes
-            actual_data=b"X" * 1000,  # Actually sends 1KB
-        )
+        from examples.fastapi_app.main import validate_upload_size, MAX_UPLOAD_SIZE_BYTES
+        from fastapi import HTTPException
 
-        upload_file = UploadFile(
-            filename="deceptive.pdf",
-            file=deceptive_file,
-        )
+        # Small actual content, but header claims huge size
+        small_content = b"small"
+        file = MagicMock()
+        file_io = io.BytesIO(small_content)
 
-        content = await upload_file.read()
+        async def read(size=-1):
+            return file_io.read(size)
 
-        # The actual data read should match what was sent, not what was claimed
-        assert len(content) == 1000
+        file.read = read
+
+        # Mock request with huge Content-Length
+        request = MagicMock()
+        request.headers = {"content-length": str(MAX_UPLOAD_SIZE_BYTES + 1000000)}
+
+        # Should reject based on Content-Length header (early rejection)
+        with pytest.raises(HTTPException) as exc_info:
+            await validate_upload_size(request, file)
+
+        assert exc_info.value.status_code == 413
 
     DECOMPRESSION_BOMB_SIGNATURES = [
         # PDF with highly compressed stream

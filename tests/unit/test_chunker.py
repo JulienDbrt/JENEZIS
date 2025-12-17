@@ -17,17 +17,12 @@ pytestmark = pytest.mark.unit
 class TestChunkerInitialization:
     """Tests for Chunker initialization."""
 
-    @pytest.mark.xfail(reason="Settings mock structure differs from actual implementation")
-    def test_default_initialization(self):
-        """Chunker should initialize with default settings."""
-        with patch("jenezis.ingestion.chunker.get_settings") as mock_settings:
-            mock_settings.return_value.CHUNK_SIZE = 512
-            mock_settings.return_value.CHUNK_OVERLAP = 50
+    def test_explicit_initialization(self):
+        """Chunker should initialize with explicit chunk size and overlap."""
+        chunker = Chunker(chunk_size=512, chunk_overlap=50)
 
-            chunker = Chunker()
-
-            assert chunker.chunk_size == 512
-            assert chunker.chunk_overlap == 50
+        assert chunker.chunk_size == 512
+        assert chunker.chunk_overlap == 50
 
     def test_custom_initialization(self):
         """Chunker should accept custom chunk size and overlap."""
@@ -36,15 +31,11 @@ class TestChunkerInitialization:
         assert chunker.chunk_size == 256
         assert chunker.chunk_overlap == 25
 
-    @pytest.mark.xfail(reason="KNOWN ISSUE: Chunker doesn't validate overlap >= chunk_size")
     def test_overlap_must_be_less_than_chunk_size(self):
         """Overlap must be less than chunk size."""
-        # This should raise an error or be handled gracefully
-        # Document expected behavior
-        chunker = Chunker(chunk_size=100, chunk_overlap=100)
-
-        # If overlap == chunk_size, chunking would never progress
-        # The code should validate this
+        # Chunker now validates this - should raise ValueError
+        with pytest.raises(ValueError, match="smaller than chunk size"):
+            Chunker(chunk_size=100, chunk_overlap=100)
 
 
 class TestChunkerBoundaryConditions:
@@ -221,20 +212,28 @@ class TestGetChunkerFactory:
 
     def test_get_chunker_returns_chunker(self):
         """get_chunker should return a Chunker instance."""
-        with patch("jenezis.ingestion.chunker.get_settings") as mock_settings:
-            mock_settings.return_value.CHUNK_SIZE = 512
-            mock_settings.return_value.CHUNK_OVERLAP = 50
+        # get_chunker uses module-level settings, so patch the settings object directly
+        with patch.object(
+            __import__("jenezis.ingestion.chunker", fromlist=["settings"]),
+            "settings"
+        ) as mock_settings:
+            mock_settings.CHUNK_SIZE = 512
+            mock_settings.CHUNK_OVERLAP = 50
+            mock_settings.GENERATOR_MODEL = "gpt-4"
 
             chunker = get_chunker()
 
             assert isinstance(chunker, Chunker)
 
-    @pytest.mark.xfail(reason="Settings mock structure differs from actual implementation")
     def test_get_chunker_uses_settings(self):
         """get_chunker should use settings for configuration."""
-        with patch("jenezis.ingestion.chunker.get_settings") as mock_settings:
-            mock_settings.return_value.CHUNK_SIZE = 256
-            mock_settings.return_value.CHUNK_OVERLAP = 25
+        import jenezis.ingestion.chunker as chunker_module
+
+        # Patch the module-level settings object
+        with patch.object(chunker_module, "settings") as mock_settings:
+            mock_settings.CHUNK_SIZE = 256
+            mock_settings.CHUNK_OVERLAP = 25
+            mock_settings.GENERATOR_MODEL = "gpt-4"
 
             chunker = get_chunker()
 
