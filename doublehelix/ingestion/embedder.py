@@ -1,7 +1,7 @@
-"LLM-agnostic client for generating text embeddings.
+"""LLM-agnostic client for generating text embeddings.
 Supports multiple providers like OpenAI, Anthropic (if they provide embeddings),
 and OpenRouter.
-"
+"""
 import asyncio
 import logging
 from typing import List

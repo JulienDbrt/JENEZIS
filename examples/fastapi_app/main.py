@@ -23,11 +23,13 @@ from starlette.status import (
 import secrets
 from sqlalchemy import select, func
 from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from doublehelix.core.config import get_settings
 from doublehelix.core.connections import (
     close_connections,
     get_db_session,
+    get_db_session_dep,
     get_s3_client,
     get_neo4j_driver,
     sql_engine,
@@ -44,7 +46,6 @@ from doublehelix.storage.metadata_store import (
 from doublehelix.storage.graph_store import GraphStore
 from doublehelix.rag.retriever import HybridRetriever
 from doublehelix.rag.generator import Generator
-from doublehelix.ingestion.extractor import get_extractor
 from doublehelix.utils.logging import setup_logging
 from .tasks import process_document, delete_document_task
 
@@ -82,8 +83,7 @@ async def lifespan(app: FastAPI):
     graph_store = GraphStore(await get_neo4j_driver())
     await graph_store.initialize_constraints_and_indexes()
     logger.info("Graph constraints and indexes ensured.")
-    extractor = get_extractor()
-    retriever = HybridRetriever(graph_store, extractor)
+    retriever = HybridRetriever(graph_store)
     app_state["generator"] = Generator(retriever)
     logger.info("RAG generator initialized.")
     yield
@@ -99,7 +99,7 @@ def get_generator() -> Generator:
 
 # --- Ontology Endpoints ---
 @app.post("/ontologies", response_model=OntologyResponse, status_code=201, dependencies=[Depends(get_api_key)])
-async def create_ontology(ontology_data: OntologySchema, db: AsyncSession = Depends(get_db_session)):
+async def create_ontology(ontology_data: OntologySchema, db: AsyncSession = Depends(get_db_session_dep)):
     new_ontology = Ontology(name=ontology_data.name, schema_json=ontology_data.schema_json)
     db.add(new_ontology)
     await db.commit()
@@ -107,12 +107,12 @@ async def create_ontology(ontology_data: OntologySchema, db: AsyncSession = Depe
     return new_ontology
 
 @app.get("/ontologies", response_model=List[OntologyResponse], dependencies=[Depends(get_api_key)])
-async def list_ontologies(db: AsyncSession = Depends(get_db_session)):
+async def list_ontologies(db: AsyncSession = Depends(get_db_session_dep)):
     result = await db.execute(select(Ontology))
     return result.scalars().all()
 
 @app.get("/ontologies/{ontology_id}", response_model=OntologyResponse, dependencies=[Depends(get_api_key)])
-async def get_ontology(ontology_id: int, db: AsyncSession = Depends(get_db_session)):
+async def get_ontology(ontology_id: int, db: AsyncSession = Depends(get_db_session_dep)):
     ontology = await db.get(Ontology, ontology_id)
     if not ontology:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Ontology not found.")
@@ -144,7 +144,7 @@ async def upload_document(
             document_hash=file_hash,
             s3_path=s3_path,
             status=DocumentStatus.PENDING,
-            ontology_id=ontology_id,
+            domain_config_id=ontology_id,
         )
         db.add(new_doc)
         await db.commit()
@@ -176,14 +176,14 @@ async def update_document(
             document_hash=file_hash,
             s3_path=f"{settings.S3_BUCKET_NAME}/{file_hash}_{file.filename}",
             status=DocumentStatus.PENDING,
-            ontology_id=ontology_id,
+            domain_config_id=ontology_id,
         )
         db.add(new_doc)
         await db.commit()
         await db.refresh(new_doc)
-        
+
         s3_client.put_object(Bucket=settings.S3_BUCKET_NAME, Key=f"{file_hash}_{file.filename}", Body=contents)
-        
+
         update_chain = chain(delete_document_task.s(document_id=document_id), process_document.s(document_id=new_doc.id))
         update_chain.delay()
     
@@ -196,7 +196,7 @@ async def get_ingestion_status(job_id: int):
         doc = await get_document_by_id(db, job_id)
         if not doc:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Job ID not found.")
-        return {"job_id": doc.id, "filename": doc.filename, "status": doc.status.value, "last_updated": doc.updated_at, "error": doc.error_log, "ontology_id": doc.ontology_id}
+        return {"job_id": doc.id, "filename": doc.filename, "status": doc.status.value, "last_updated": doc.updated_at, "error": doc.error_log, "domain_config_id": doc.domain_config_id}
 
 @app.post("/query", dependencies=[Depends(get_api_key)])
 async def query_rag(query: str, generator: Generator = Depends(get_generator)):

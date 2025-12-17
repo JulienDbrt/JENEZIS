@@ -31,6 +31,7 @@ fuzzywuzzy = "^0.18.0"
 python-levenshtein = "^0.26.0"
 python-multipart = "^0.0.9" # For FastAPI file uploads
 aiohttp = "^3.9.5" # For async HTTP requests in examples/tests
+python-json-logger = "^2.0.7"  # For structured JSON logging
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"

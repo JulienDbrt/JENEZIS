@@ -77,7 +77,13 @@ CYPHER_TEMPLATES = {
         RETURN chunk.id as chunk_id, chunk.text as text, 2 as score, LABELS(c) as node_type
         LIMIT 10
     """,
-    "get_attributes": "MATCH (n) WHERE n.name = $node_properties[0].name RETURN n.name as chunk_id, apoc.convert.toJson(n) as text, 3 as score, LABELS(n) as node_type LIMIT 1",
+    "get_attributes": """
+        UNWIND $node_properties as props
+        MATCH (n) WHERE n.name CONTAINS props.name
+        OPTIONAL MATCH (n)<-[:MENTIONS]-(c:Chunk)
+        RETURN COALESCE(c.id, n.name) as chunk_id, COALESCE(c.text, apoc.convert.toJson(n)) as text, 3 as score, LABELS(n) as node_type
+        LIMIT 5
+    """,
 }
 
 

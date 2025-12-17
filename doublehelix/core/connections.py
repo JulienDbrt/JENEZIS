@@ -42,12 +42,27 @@ except Exception as e:
     sql_engine = None
     AsyncSessionFactory = None
 
-@asynccontextmanager
-async def get_db_session() -> AsyncSession:
-    """Provide a transactional scope around a series of operations."""
+async def get_db_session_dep():
+    """FastAPI dependency for database sessions. Use with Depends(get_db_session_dep)."""
     if AsyncSessionFactory is None:
         raise RuntimeError("Database not initialized. Check METADATA_STORE_URL.")
-    
+
+    session = AsyncSessionFactory()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+@asynccontextmanager
+async def get_db_session():
+    """Async context manager for database sessions. Use with 'async with get_db_session()'."""
+    if AsyncSessionFactory is None:
+        raise RuntimeError("Database not initialized. Check METADATA_STORE_URL.")
+
     session = AsyncSessionFactory()
     try:
         yield session

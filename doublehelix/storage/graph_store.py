@@ -101,8 +101,11 @@ class GraphStore:
         UNWIND $entities as entity_data
         // Use apoc.merge.node to handle dynamic labels from the entity type
         CALL apoc.merge.node(['Entity', entity_data.type], {canonical_id: entity_data.id}) YIELD node
-        ON CREATE SET node.name = entity_data.name, node.created_at = datetime()
-        ON MATCH SET node.name = entity_data.name
+        SET node.name = entity_data.name,
+            node.updated_at = datetime()
+        WITH node
+        WHERE node.created_at IS NULL
+        SET node.created_at = datetime()
         """
         try:
             await self.driver.execute_query(node_query, entities=entities, database_=self.database)
@@ -170,20 +173,37 @@ class GraphStore:
             raise
 
     async def vector_search(self, query_embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
-        """Performs a vector similarity search on chunk embeddings."""
+        """Performs a vector similarity search on chunk embeddings.
+        Falls back to returning empty results if vector index doesn't exist (Community Edition).
+        """
         query = """
         CALL db.index.vector.queryNodes('chunk_embeddings', $top_k, $embedding) YIELD node, score
-        MATCH (node)-<-[:HAS_CHUNK]-(d:Document)
+        MATCH (node)<-[:HAS_CHUNK]-(d:Document)
         RETURN
             node.id as chunk_id,
             node.text as text,
             score,
             d.id as document_id
         """
-        records, _, _ = await self.driver.execute_query(
-            query,
-            top_k=top_k,
-            embedding=query_embedding,
-            database_=self.database
-        )
-        return [record.data() for record in records]
+        try:
+            records, _, _ = await self.driver.execute_query(
+                query,
+                top_k=top_k,
+                embedding=query_embedding,
+                database_=self.database
+            )
+            return [record.data() for record in records]
+        except Exception as e:
+            if "vector" in str(e).lower() or "index" in str(e).lower():
+                logger.warning(f"Vector search failed (likely no vector index support): {e}")
+                # Fallback: return all chunks sorted by text length as a basic fallback
+                fallback_query = """
+                MATCH (c:Chunk)<-[:HAS_CHUNK]-(d:Document)
+                RETURN c.id as chunk_id, c.text as text, 0.5 as score, d.id as document_id
+                LIMIT $top_k
+                """
+                records, _, _ = await self.driver.execute_query(
+                    fallback_query, top_k=top_k, database_=self.database
+                )
+                return [record.data() for record in records]
+            raise

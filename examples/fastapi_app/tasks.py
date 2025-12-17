@@ -48,9 +48,9 @@ def process_document(self, document_id: int):
     """Main task for ingesting a document with the neuro-symbolic 'Harmonizer' pipeline."""
     logger.info(f"Starting ingestion for document_id: {document_id}")
     try:
-        graph_store = GraphStore(get_neo4j_driver())
         doc_embedder = embedder.get_embedder()
         async def run_async_pipeline():
+            graph_store = GraphStore(await get_neo4j_driver())
             async with get_db_session() as db:
                 doc = (await db.execute(select(Document).options(selectinload(Document.domain_config)).filter(Document.id == document_id))).scalars().one_or_none()
                 if not doc: raise ValueError(f"Doc {document_id} not found.")
@@ -139,7 +139,7 @@ def delete_document_task(document_id: int):
     try:
         async def run_async_delete():
             async with get_db_session() as db: await update_document_status(db, document_id, DocumentStatus.DELETING)
-            await GraphStore(get_neo4j_driver()).delete_document_and_associated_data(document_id)
+            await GraphStore(await get_neo4j_driver()).delete_document_and_associated_data(document_id)
             async with get_db_session() as db:
                 doc = await get_document_by_id(db, document_id)
                 if doc:
@@ -157,7 +157,7 @@ def delete_document_task(document_id: int):
 def run_garbage_collection():
     logger.info("Starting garbage collection task...")
     try:
-        async def run_async_gc(): await GraphStore(get_neo4j_driver()).garbage_collect_orphaned_entities()
+        async def run_async_gc(): await GraphStore(await get_neo4j_driver()).garbage_collect_orphaned_entities()
         import asyncio; asyncio.run(run_async_gc())
     except Exception as e:
         logger.error(f"Garbage collection task failed: {e}", exc_info=True); raise

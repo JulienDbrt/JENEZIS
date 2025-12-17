@@ -72,8 +72,10 @@ class Generator:
         # 2. Augment (create the prompt)
         context_str = ""
         for i, source in enumerate(sources):
-            context_str += f"--- Context Document {i+1} (Source ID: doc-{source['document_id']}/chunk-{source['chunk_id']}) ---"\n"
-            context_str += source['text']
+            doc_id = source.get('document_id', 'N/A')
+            chunk_id = source.get('chunk_id', 'N/A')
+            context_str += f"--- Context Document {i+1} (Source ID: doc-{doc_id}/chunk-{chunk_id}) ---\n"
+            context_str += source.get('text', '')
             context_str += "\n\n"
 
         prompt = f"User Question: {query}\n\n--- Context ---\n{context_str}"

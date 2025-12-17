@@ -6467,6 +6467,18 @@ client = ["requests (>=2.21.0)", "websocket-client (>=0.54.0)"]
 docs = ["sphinx"]
 
 [[package]]
+name = "python-json-logger"
+version = "2.0.7"
+description = "A python library adding a json log formatter"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "python-json-logger-2.0.7.tar.gz", hash = "sha256:23e7ec02d34237c5aa1e29a070193a4ea87583bb4e7f8fd06d3de8264c4b2e1c"},
+    {file = "python_json_logger-2.0.7-py3-none-any.whl", hash = "sha256:f380b826a991ebbe3de4d897aeec42760035ac760345e57b812938dc8b35e2bd"},
+]
+
+[[package]]
 name = "python-levenshtein"
 version = "0.26.1"
 description = "Python extension for computing string edit distances and similarities."
@@ -10258,4 +10270,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "62f01c3aa3a0cd10a0e1709dad997b561eb061d9a851a8edd1f163915cc4f73c"
+content-hash = "d5ebc1204f089b3c38f56de3ee351f55bb9898d5e603a7846867da26978d3ae6"

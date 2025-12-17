@@ -31,8 +31,8 @@ class Document(Base):
     s3_path = Column(String, nullable=False)
     status = Column(Enum(DocumentStatus), default=DocumentStatus.PENDING, nullable=False)
     error_log = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     domain_config_id = Column(Integer, ForeignKey('domain_configs.id'), nullable=False)
     domain_config = relationship("DomainConfig", back_populates="documents")
 
@@ -42,7 +42,7 @@ class APIKey(Base):
     key_hash = Column(String(64), nullable=False, unique=True, index=True)
     description = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 # --- Neuro-Symbolic Foundation Models ---
 
@@ -52,7 +52,7 @@ class DomainConfig(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True)
     schema_json = Column(JSON, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     documents = relationship("Document", back_populates="domain_config")
 
 class CanonicalNode(Base):
@@ -87,8 +87,8 @@ class EnrichmentQueueItem(Base):
     entity_type = Column(String, nullable=False)
     context_chunk = Column(Text, nullable=True)
     status = Column(Enum(EnrichmentStatus), default=EnrichmentStatus.PENDING, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 # --- Helper Functions (remain largely the same) ---
 
@@ -110,3 +110,6 @@ async def update_document_status(db: AsyncSession, doc_id: int, status: Document
         doc.status = status; doc.error_log = error_message
         await db.commit(); await db.refresh(doc)
     return doc
+
+# Alias for backwards compatibility
+Ontology = DomainConfig

@@ -18,7 +18,7 @@ RUN pip install poetry
 COPY pyproject.toml poetry.lock ./
 
 # Install dependencies, excluding development ones
-RUN poetry install --no-root --no-dev --no-interaction
+RUN poetry install --no-root --only main --no-interaction
 
 # --- Final Stage ---
 FROM python:3.11-slim
@@ -26,6 +26,7 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -37,6 +38,8 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 # Copy the application source code
 COPY ./doublehelix ./doublehelix
 COPY ./examples ./examples
+COPY ./alembic ./alembic
+COPY ./alembic.ini ./alembic.ini
 
 # The command to run the application will be specified in the docker-compose.yml
 # For example:

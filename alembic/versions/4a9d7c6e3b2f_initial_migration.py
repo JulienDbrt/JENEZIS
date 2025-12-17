@@ -23,7 +23,7 @@ def upgrade() -> None:
     sa.Column('key_hash', sa.String(length=64), nullable=False),
     sa.Column('description', sa.String(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_api_keys_id'), 'api_keys', ['id'], unique=False)
@@ -36,8 +36,8 @@ def upgrade() -> None:
     sa.Column('s3_path', sa.String(), nullable=False),
     sa.Column('status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'UPDATING', 'DELETING', name='documentstatus'), nullable=False),
     sa.Column('error_log', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_documents_document_hash'), 'documents', ['document_hash'], unique=True)

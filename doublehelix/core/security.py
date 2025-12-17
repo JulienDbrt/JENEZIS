@@ -7,7 +7,7 @@ from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.status import HTTP_403_FORBIDDEN
 
-from doublehelix.core.connections import get_db_session
+from doublehelix.core.connections import get_db_session_dep
 from doublehelix.storage.metadata_store import get_api_key_by_hash
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def get_key_hash(api_key: str) -> str:
 
 async def get_api_key(
     api_key_header: str = Security(API_KEY_HEADER),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session_dep)
 ):
     """
     FastAPI dependency that validates a bearer token against a database of hashed keys.

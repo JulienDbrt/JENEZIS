@@ -8,7 +8,7 @@ Create Date: 2025-11-21 14:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-import pgvector
+from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision = '2c7a8d5b4e3f'
@@ -26,7 +26,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('schema_json', postgresql.JSON(astext_type=sa.Text()), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
@@ -36,7 +36,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('node_type', sa.String(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
-    sa.Column('embedding', pgvector.sqlalchemy.VECTOR(dimensions=1536), nullable=False),
+    sa.Column('embedding', Vector(1536), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )

@@ -24,8 +24,8 @@ def upgrade() -> None:
     sa.Column('entity_type', sa.String(), nullable=False),
     sa.Column('context_chunk', sa.Text(), nullable=True),
     sa.Column('status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', name='enrichmentstatus'), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_enrichment_queue_id'), 'enrichment_queue', ['id'], unique=False)
