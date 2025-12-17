@@ -75,6 +75,21 @@ class Settings(BaseSettings):
 
     # DATABASE & STORAGE CONFIG
     METADATA_STORE_URL: str = "sqlite+aiosqlite:///./jenezis.db"
+
+    # FalkorDB (Graph Database - replaces Neo4j)
+    FALKOR_HOST: str = "localhost"
+    FALKOR_PORT: int = 6379
+    FALKOR_PASSWORD: str | None = None
+    FALKOR_GRAPH: str = "jenezis"
+
+    @field_validator('FALKOR_PASSWORD', mode='before')
+    @classmethod
+    def load_falkor_password_from_secret(cls, v):
+        """Load FALKOR_PASSWORD from Docker secret file if available."""
+        secret = _read_secret_file('FALKOR_PASSWORD')
+        return secret if secret else v
+
+    # DEPRECATED: Neo4j settings (kept for migration, will be removed)
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = ""

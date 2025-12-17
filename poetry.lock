@@ -1909,6 +1909,22 @@ files = [
 tzdata = "*"
 
 [[package]]
+name = "falkordb"
+version = "1.2.2"
+description = "Python client for interacting with FalkorDB database"
+optional = false
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+files = [
+    {file = "falkordb-1.2.2-py3-none-any.whl", hash = "sha256:cc1fcccaa1148be9e3d22d85af03d027f19b398e0f38d04424f3757a02744976"},
+    {file = "falkordb-1.2.2.tar.gz", hash = "sha256:3fc150d3262b971916a0f2c15f419f7fe521a94fe3a672b6f174288d885fd239"},
+]
+
+[package.dependencies]
+python-dateutil = ">=2.9.0,<3.0.0"
+redis = ">=6.0.0,<7.0.0"
+
+[[package]]
 name = "fastapi"
 version = "0.111.1"
 description = "FastAPI framework, high performance, easy to learn, fast to code, ready for production"
@@ -6130,24 +6146,6 @@ markers = {spacy = "python_full_version >= \"3.12.4\""}
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
-name = "pyjwt"
-version = "2.10.1"
-description = "JSON Web Token implementation in Python"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "PyJWT-2.10.1-py3-none-any.whl", hash = "sha256:dcdd193e30abefd5debf142f9adfcdd2b58004e644f25406ffaebd50bd98dacb"},
-    {file = "pyjwt-2.10.1.tar.gz", hash = "sha256:3cc5772eb20009233caf06e9d8a0577824723b44e6648ee0a2aedb6cf9381953"},
-]
-
-[package.extras]
-crypto = ["cryptography (>=3.4.0)"]
-dev = ["coverage[toml] (==5.0.4)", "cryptography (>=3.4.0)", "pre-commit", "pytest (>=6.0.0,<7.0.0)", "sphinx", "sphinx-rtd-theme", "zope.interface"]
-docs = ["sphinx", "sphinx-rtd-theme", "zope.interface"]
-tests = ["coverage[toml] (==5.0.4)", "pytest (>=6.0.0,<7.0.0)"]
-
-[[package]]
 name = "pylatexenc"
 version = "2.10"
 description = "Simple LaTeX parser providing latex-to-unicode and unicode-to-latex conversion"
@@ -6961,23 +6959,23 @@ tqdm = "*"
 
 [[package]]
 name = "redis"
-version = "5.3.1"
+version = "6.4.0"
 description = "Python client for Redis database and key-value store"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "redis-5.3.1-py3-none-any.whl", hash = "sha256:dc1909bd24669cc31b5f67a039700b16ec30571096c5f1f0d9d2324bff31af97"},
-    {file = "redis-5.3.1.tar.gz", hash = "sha256:ca49577a531ea64039b5a36db3d6cd1a0c7a60c34124d46924a45b956e8cf14c"},
+    {file = "redis-6.4.0-py3-none-any.whl", hash = "sha256:f0544fa9604264e9464cdf4814e7d4830f74b165d52f2a330a760a88dd248b7f"},
+    {file = "redis-6.4.0.tar.gz", hash = "sha256:b01bc7282b8444e28ec36b261df5375183bb47a07eb9c603f284e89cbc5ef010"},
 ]
 
 [package.dependencies]
 async-timeout = {version = ">=4.0.3", markers = "python_full_version < \"3.11.3\""}
-PyJWT = ">=2.9.0"
 
 [package.extras]
-hiredis = ["hiredis (>=3.0.0)"]
-ocsp = ["cryptography (>=36.0.1)", "pyopenssl (==23.2.1)", "requests (>=2.31.0)"]
+hiredis = ["hiredis (>=3.2.0)"]
+jwt = ["pyjwt (>=2.9.0)"]
+ocsp = ["cryptography (>=36.0.1)", "pyopenssl (>=20.0.1)", "requests (>=2.31.0)"]
 
 [[package]]
 name = "referencing"
@@ -10270,4 +10268,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "d5ebc1204f089b3c38f56de3ee351f55bb9898d5e603a7846867da26978d3ae6"
+content-hash = "b054c607d002ed8e63aba630f97bab4342097515ecb772d02de11ab8d2f661a1"

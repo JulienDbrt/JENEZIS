@@ -1,21 +1,40 @@
 version: '3.8'
 
-# SECURITY: Using Docker secrets for sensitive credentials instead of environment variables
-# Secrets are mounted as files at /run/secrets/<secret_name> inside containers
-# Create secrets with: echo "your_password" | docker secret create <secret_name> -
-# Or use external secrets management (Vault, AWS Secrets Manager, etc.)
+# JENEZIS Docker Stack - Sovereign Edition
+# ========================================
+# Graph Database: FalkorDB (replaces Neo4j - no APOC dependency)
+# Metadata: PostgreSQL with pgvector
+# Object Storage: MinIO
+# Message Broker: Redis (shared with FalkorDB)
 
 secrets:
   postgres_password:
     file: ../secrets/postgres_password.txt
-  neo4j_password:
-    file: ../secrets/neo4j_password.txt
   minio_secret_key:
     file: ../secrets/minio_secret_key.txt
   openai_api_key:
     file: ../secrets/openai_api_key.txt
 
 services:
+  # FalkorDB - Graph Database with native vector support
+  # Replaces Neo4j Enterprise + APOC with a simpler, faster alternative
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: jenezis-falkordb
+    ports:
+      - "6379:6379"
+    volumes:
+      - falkor_data:/data
+    environment:
+      # FalkorDB runs on Redis protocol, persistence enabled by default
+      - FALKORDB_ARGS=--save 60 1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL - Metadata store (API keys, documents, domain configs)
   postgres:
     image: pgvector/pgvector:pg16
     container_name: jenezis-postgres
@@ -35,40 +54,7 @@ services:
       timeout: 5s
       retries: 10
 
-  neo4j:
-    image: neo4j:5.20-enterprise
-    container_name: jenezis-neo4j
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    volumes:
-      - neo4j_data:/data
-      - neo4j_plugins:/plugins
-    environment:
-      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/FILE:/run/secrets/neo4j_password
-      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
-      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
-    secrets:
-      - neo4j_password
-    healthcheck:
-      test: ["CMD-SHELL", "wget -O /dev/null -q http://localhost:7474 || exit 1"]
-      interval: 5s
-      timeout: 10s
-      retries: 10
-
-  redis:
-    image: redis:7.2-alpine
-    container_name: jenezis-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
+  # MinIO - Object storage for documents
   minio:
     image: minio/minio:latest
     container_name: jenezis-minio
@@ -89,6 +75,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis - Celery message broker (separate from FalkorDB for isolation)
+  redis:
+    image: redis:7.2-alpine
+    container_name: jenezis-redis
+    ports:
+      - "6380:6379"  # Different port to avoid conflict with FalkorDB
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # API Server
   api:
     build:
       context: ..
@@ -100,28 +101,33 @@ services:
     env_file:
       - ../.env
     environment:
-      # SECURITY: Connection strings built from secrets at runtime
+      # FalkorDB connection
+      - FALKOR_HOST=falkordb
+      - FALKOR_PORT=6379
+      - FALKOR_GRAPH=jenezis
+      # Metadata store
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
-      - NEO4J_PASSWORD_FILE=/run/secrets/neo4j_password
-      - OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
-      - NEO4J_URI=bolt://neo4j:7687
+      # Object storage
       - S3_ENDPOINT_URL=http://minio:9000
+      # Celery (uses separate Redis instance)
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      # API keys
+      - OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
     secrets:
       - postgres_password
-      - neo4j_password
       - openai_api_key
     depends_on:
       postgres:
         condition: service_healthy
-      neo4j:
+      falkordb:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
 
+  # Celery Worker
   worker:
     build:
       context: ..
@@ -131,27 +137,32 @@ services:
     env_file:
       - ../.env
     environment:
-      # SECURITY: Connection strings built from secrets at runtime
+      # FalkorDB connection
+      - FALKOR_HOST=falkordb
+      - FALKOR_PORT=6379
+      - FALKOR_GRAPH=jenezis
+      # Metadata store
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
-      - NEO4J_PASSWORD_FILE=/run/secrets/neo4j_password
-      - OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
-      - NEO4J_URI=bolt://neo4j:7687
+      # Object storage
       - S3_ENDPOINT_URL=http://minio:9000
+      # Celery (uses separate Redis instance)
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      # API keys
+      - OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
     secrets:
       - postgres_password
-      - neo4j_password
       - openai_api_key
     depends_on:
       api:
         condition: service_started
       postgres:
         condition: service_healthy
+      falkordb:
+        condition: service_healthy
 
 volumes:
+  falkor_data:
   postgres_data:
-  neo4j_data:
-  neo4j_plugins:
   redis_data:
   minio_data:

@@ -1,15 +1,29 @@
 """
-Interface for all Neo4j graph operations, including ingestion, updates,
-deletions, and search. It handles the creation of nodes, relationships,
-vector indexes, and the clean purging of orphaned data.
+GraphStore - Unified graph database interface for JENEZIS.
+
+This module provides a facade over the FalkorEngine, maintaining API compatibility
+with the rest of the JENEZIS codebase while using FalkorDB as the backend.
+
+Migration Note
+--------------
+This version replaces the Neo4j-based implementation with FalkorDB.
+The interface remains identical to ensure backward compatibility.
+
+Key Changes from Neo4j Version
+------------------------------
+- No APOC dependency (dynamic labels stored as properties)
+- Vector search via FalkorDB native HNSW indexes
+- Redis-based persistence (faster, simpler)
+
+Copyright (c) 2025 Sigilum - BSL 1.1 License
 """
+
 import logging
 import re
-from typing import List, Dict, Any
-
-from neo4j import AsyncDriver
+from typing import Any
 
 from jenezis.core.config import get_settings
+from jenezis.storage.falkor_engine import FalkorEngine
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -17,11 +31,11 @@ settings = get_settings()
 
 # --- Security: Cypher Label/Type Sanitization ---
 
-# Pattern for valid Neo4j labels/relationship types
+# Pattern for valid labels/relationship types
 # Must start with letter, contain only alphanumeric and underscore
 SAFE_LABEL_PATTERN = re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
 
-# Maximum length for labels (Neo4j doesn't have strict limit but we impose one)
+# Maximum length for labels
 MAX_LABEL_LENGTH = 64
 
 
@@ -32,17 +46,17 @@ class InvalidLabelError(ValueError):
 
 def sanitize_label(label: str, label_kind: str = "entity type") -> str:
     """
-    Sanitizes a Neo4j label or relationship type to prevent Cypher injection.
+    Sanitizes a label or relationship type to prevent Cypher injection.
 
     Args:
         label: The label/type string to sanitize
-        label_kind: Description for error messages ("entity type" or "relationship type")
+        label_kind: Description for error messages
 
     Returns:
         The validated label string (unchanged if valid)
 
     Raises:
-        InvalidLabelError: If the label contains dangerous characters or patterns
+        InvalidLabelError: If the label contains dangerous characters
     """
     if not label:
         raise InvalidLabelError(f"Empty {label_kind} is not allowed")
@@ -80,18 +94,9 @@ def sanitize_label(label: str, label_kind: str = "entity type") -> str:
     return cleaned
 
 
-def sanitize_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def sanitize_entities(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Sanitizes a list of entities, validating all type fields.
-
-    Args:
-        entities: List of entity dicts with 'id', 'name', 'type'
-
-    Returns:
-        The same list with validated types
-
-    Raises:
-        InvalidLabelError: If any entity has an invalid type
     """
     for entity in entities:
         entity_type = entity.get('type', '')
@@ -99,226 +104,272 @@ def sanitize_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return entities
 
 
-def sanitize_relations(relations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def sanitize_relations(relations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Sanitizes a list of relations, validating all type fields.
-
-    Args:
-        relations: List of relation dicts with 'source_id', 'target_id', 'type', 'chunk_id'
-
-    Returns:
-        The same list with validated types
-
-    Raises:
-        InvalidLabelError: If any relation has an invalid type
     """
     for relation in relations:
         rel_type = relation.get('type', '')
         sanitize_label(rel_type, "relationship type")
     return relations
 
+
 class GraphStore:
     """
-    Manages all interactions with the Neo4j graph database.
+    Manages all interactions with the FalkorDB graph database.
+
+    This class provides the same interface as the previous Neo4j-based
+    implementation but uses FalkorDB as the backend.
+
+    Attributes
+    ----------
+    engine : FalkorEngine
+        The underlying FalkorDB engine
     """
-    def __init__(self, driver: AsyncDriver):
-        self.driver = driver
-        self.database = settings.NEO4J_DATABASE
+
+    def __init__(self, engine: FalkorEngine | None = None):
+        """
+        Initialize GraphStore.
+
+        Parameters
+        ----------
+        engine : FalkorEngine, optional
+            Pre-configured engine. If None, creates one from settings.
+        """
+        if engine is not None:
+            self.engine = engine
+        else:
+            # Create engine from settings
+            self.engine = FalkorEngine(
+                host=getattr(settings, 'FALKOR_HOST', 'localhost'),
+                port=getattr(settings, 'FALKOR_PORT', 6379),
+                password=getattr(settings, 'FALKOR_PASSWORD', None),
+                graph_name=getattr(settings, 'FALKOR_GRAPH', 'jenezis')
+            )
 
     async def initialize_constraints_and_indexes(self):
         """
-        Idempotently creates necessary constraints and indexes in the graph.
-        This is crucial for performance and data integrity.
+        Idempotently creates necessary indexes in the graph.
+
+        Note: FalkorDB doesn't have constraints like Neo4j, but we create
+        property indexes and vector indexes for performance.
         """
-        async with self.driver.session(database=self.database) as session:
-            # Constraints for uniqueness
-            await session.run("CREATE CONSTRAINT document_id_unique IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE")
-            await session.run("CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE")
-            await session.run("CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.canonical_id IS UNIQUE")
-            logger.info("Graph constraints ensured.")
-
-            # Vector Index for Chunk embeddings
-            try:
-                await session.run("CREATE FULLTEXT INDEX entity_names_ft_index IF NOT EXISTS FOR (e:Entity) ON (e.name)")
-                logger.info("Full-text index 'entity_names_ft_index' ensured.")
-
-                await session.run(f"""
-                CREATE VECTOR INDEX `chunk_embeddings` IF NOT EXISTS
-                FOR (c:Chunk) ON (c.embedding)
-                OPTIONS {{ indexConfig: {{
-                    `vector.dimensions`: {settings.EMBEDDING_DIMENSIONS},
-                    `vector.similarity_function`: 'cosine'
-                }}}}
-                """)
-                logger.info("Vector index 'chunk_embeddings' ensured.")
-            except Exception as e:
-                logger.error(f"Failed to create vector index or full-text index. Your Neo4j version/edition might not support it. Error: {e}")
+        # FalkorEngine operations are synchronous, but we keep async interface
+        # for backward compatibility
+        self.engine.initialize_schema()
+        logger.info("Graph schema initialized (FalkorDB)")
 
     async def add_document_node(self, document_id: int, filename: str):
         """Creates a 'Document' node in the graph."""
-        query = """
-        MERGE (d:Document {id: $document_id})
-        ON CREATE SET d.filename = $filename, d.created_at = datetime()
-        ON MATCH SET d.filename = $filename, d.updated_at = datetime()
-        """
-        await self.driver.execute_query(
-            query,
-            document_id=document_id,
-            filename=filename,
-            database_=self.database
-        )
+        self.engine.upsert_document(document_id, filename)
 
-    async def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]]):
+    async def add_chunks(self, document_id: int, chunks: list[dict[str, Any]]):
         """
         Adds a batch of 'Chunk' nodes and connects them to their parent 'Document'.
-        'chunks' is a list of dicts, each with 'id', 'text', and 'embedding'.
         """
-        query = """
-        UNWIND $chunks as chunk_data
-        MATCH (d:Document {id: $document_id})
-        MERGE (c:Chunk {id: chunk_data.id})
-        ON CREATE SET
-            c.text = chunk_data.text,
-            c.embedding = chunk_data.embedding,
-            c.created_at = datetime()
-        MERGE (d)-[:HAS_CHUNK]->(c)
-        """
-        await self.driver.execute_query(
-            query,
-            document_id=document_id,
-            chunks=chunks,
-            database_=self.database
-        )
+        self.engine.upsert_chunks(document_id, chunks)
 
-    async def add_entities_and_relations(self, entities: List[Dict], relations: List[Dict]):
+    async def add_entities_and_relations(
+        self,
+        entities: list[dict],
+        relations: list[dict]
+    ):
         """
-        Idempotently adds entities and relationships using dynamic labels for nodes
-        based on the entity type from the ontology.
-        - entities: [{'id', 'name', 'type'}]
-        - relations: [{'source_id', 'target_id', 'type', 'chunk_id'}]
+        Idempotently adds entities and relationships.
 
-        Raises:
-            InvalidLabelError: If any entity type or relation type fails validation
+        Unlike the Neo4j version that uses APOC for dynamic labels,
+        we store the entity type as a property since FalkorDB doesn't
+        support APOC procedures.
+
+        Parameters
+        ----------
+        entities : list[dict]
+            List of entities with keys: id, name, type
+        relations : list[dict]
+            List of relations with keys: source_id, target_id, type, chunk_id
+
+        Raises
+        ------
+        InvalidLabelError
+            If any entity type or relation type fails validation
         """
-        # SECURITY: Sanitize all entity types and relation types BEFORE using in Cypher
-        # This prevents Cypher injection via malicious LLM output
+        # SECURITY: Sanitize all entity types and relation types
         sanitize_entities(entities)
         if relations:
             sanitize_relations(relations)
 
-        # This operation is broken into two parts for clarity and robustness.
+        # Upsert entities
+        self.engine.upsert_entities(entities)
 
-        # 1. Merge Nodes with Dynamic Labels using APOC
-        # We give each node a base 'Entity' label plus its specific type label.
-        # SECURITY NOTE: entity_data.type is now guaranteed to be safe (alphanumeric + underscore)
-        node_query = """
-        UNWIND $entities as entity_data
-        // Use apoc.merge.node to handle dynamic labels from the entity type
-        CALL apoc.merge.node(['Entity', entity_data.type], {canonical_id: entity_data.id}) YIELD node
-        SET node.name = entity_data.name,
-            node.updated_at = datetime()
-        WITH node
-        WHERE node.created_at IS NULL
-        SET node.created_at = datetime()
-        """
-        try:
-            await self.driver.execute_query(node_query, entities=entities, database_=self.database)
-        except Exception as e:
-            logger.error(f"Failed to merge nodes with dynamic labels. Ensure APOC plugin is installed. Error: {e}")
-            raise
-
-        # 2. Merge Relationships between the now-existing nodes
+        # Upsert relations
         if relations:
-            # SECURITY NOTE: rel_data.type is now guaranteed to be safe
-            relation_query = """
-            UNWIND $relations as rel_data
-            MATCH (source:Entity {canonical_id: rel_data.source_id})
-            MATCH (target:Entity {canonical_id: rel_data.target_id})
-            MATCH (chunk:Chunk {id: rel_data.chunk_id})
-            // Create the dynamic relationship, also with APOC for safety
-            CALL apoc.create.relationship(source, rel_data.type, {}, target) YIELD rel
-            // Link the chunk to the entities it mentions
-            MERGE (chunk)-[:MENTIONS]->(source)
-            MERGE (chunk)-[:MENTIONS]->(target)
-            """
-            try:
-                await self.driver.execute_query(relation_query, relations=relations, database_=self.database)
-            except Exception as e:
-                logger.error(f"Failed to create relationships. Error: {e}")
-                raise
+            self.engine.upsert_relations(relations)
+
+            # Link entities to their source chunks
+            # Group by chunk_id for efficiency
+            from collections import defaultdict
+            chunk_entities: dict[str, set[str]] = defaultdict(set)
+
+            for rel in relations:
+                chunk_id = rel.get('chunk_id')
+                if chunk_id:
+                    chunk_entities[chunk_id].add(rel['source_id'])
+                    chunk_entities[chunk_id].add(rel['target_id'])
+
+            for chunk_id, entity_ids in chunk_entities.items():
+                self.engine.link_entities_to_chunk(chunk_id, list(entity_ids))
 
     async def delete_document_and_associated_data(self, document_id: int):
         """
         Deletes a document and its chunks from the graph.
-        This operation is now decoupled from orphan entity cleanup.
+
+        Note: Entities are NOT deleted here - they may be referenced
+        by other documents. Use garbage_collect_orphaned_entities()
+        to clean up orphaned entities.
         """
-        query = """
-        MATCH (d:Document {id: $document_id})
-        OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
-        DETACH DELETE d, c
-        """
-        await self.driver.execute_query(query, document_id=document_id, database_=self.database)
+        self.engine.delete_document(document_id)
         logger.info(f"Successfully deleted document {document_id} and its chunks.")
 
     async def garbage_collect_orphaned_entities(self):
         """
-        Finds and deletes orphaned entities in batches using APOC.
+        Finds and deletes orphaned entities.
+
         An orphan is an entity with no connections to any chunks.
         """
-        # This query uses apoc.periodic.iterate for scalable batch processing.
-        # It finds all entities that are not mentioned by any chunk and deletes them.
-        query = """
-        CALL apoc.periodic.iterate(
-            "MATCH (e:Entity) WHERE NOT (e)<-[:MENTIONS]-() RETURN e",
-            "DETACH DELETE e",
-            {batchSize: 1000, parallel: false}
-        )
-        YIELD batches, total, errorMessages
-        RETURN batches, total, errorMessages
-        """
-        try:
-            result, _, _ = await self.driver.execute_query(query, database_=self.database)
-            summary = result[0]
-            logger.info(f"Orphaned entity garbage collection complete. "
-                        f"Processed {summary['total']} entities in {summary['batches']} batches.")
-            if summary['errorMessages']:
-                logger.error(f"Errors during garbage collection: {summary['errorMessages']}")
-        except Exception as e:
-            logger.error(f"Garbage collection task failed. Ensure APOC plugin is installed. Error: {e}")
-            raise
+        deleted_count = self.engine.garbage_collect_orphans()
+        logger.info(f"Orphaned entity garbage collection complete. "
+                    f"Deleted {deleted_count} entities.")
 
-    async def vector_search(self, query_embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
-        """Performs a vector similarity search on chunk embeddings.
-        Falls back to returning empty results if vector index doesn't exist (Community Edition).
+    async def vector_search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 5
+    ) -> list[dict[str, Any]]:
         """
-        query = """
-        CALL db.index.vector.queryNodes('chunk_embeddings', $top_k, $embedding) YIELD node, score
-        MATCH (node)<-[:HAS_CHUNK]-(d:Document)
-        RETURN
-            node.id as chunk_id,
-            node.text as text,
-            score,
-            d.id as document_id
+        Performs a vector similarity search on chunk embeddings.
+
+        Parameters
+        ----------
+        query_embedding : list[float]
+            The query vector
+        top_k : int
+            Number of results to return
+
+        Returns
+        -------
+        list[dict]
+            Results with keys: chunk_id, text, score, document_id
+        """
+        # Search chunks by embedding
+        cypher = """
+            CALL db.idx.vector.queryNodes('Chunk', 'embedding', $top_k, $vec)
+            YIELD node, score
+            MATCH (d:Document)-[:HAS_CHUNK]->(node)
+            RETURN node.id AS chunk_id,
+                   node.text AS text,
+                   score,
+                   d.id AS document_id
+            ORDER BY score DESC
         """
         try:
-            records, _, _ = await self.driver.execute_query(
-                query,
-                top_k=top_k,
-                embedding=query_embedding,
-                database_=self.database
-            )
-            return [record.data() for record in records]
+            result = self.engine.query(cypher, {"top_k": top_k, "vec": query_embedding})
+            return [
+                {
+                    "chunk_id": row[0],
+                    "text": row[1],
+                    "score": row[2],
+                    "document_id": row[3]
+                }
+                for row in result.result_set
+            ]
         except Exception as e:
-            if "vector" in str(e).lower() or "index" in str(e).lower():
-                logger.warning(f"Vector search failed (likely no vector index support): {e}")
-                # Fallback: return all chunks sorted by text length as a basic fallback
-                fallback_query = """
-                MATCH (c:Chunk)<-[:HAS_CHUNK]-(d:Document)
-                RETURN c.id as chunk_id, c.text as text, 0.5 as score, d.id as document_id
+            logger.warning(f"Vector search failed: {e}. Returning fallback results.")
+            # Fallback: return recent chunks
+            fallback_cypher = """
+                MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk)
+                RETURN c.id AS chunk_id, c.text AS text, 0.5 AS score, d.id AS document_id
                 LIMIT $top_k
-                """
-                records, _, _ = await self.driver.execute_query(
-                    fallback_query, top_k=top_k, database_=self.database
-                )
-                return [record.data() for record in records]
-            raise
+            """
+            result = self.engine.query(fallback_cypher, {"top_k": top_k})
+            return [
+                {
+                    "chunk_id": row[0],
+                    "text": row[1],
+                    "score": row[2],
+                    "document_id": row[3]
+                }
+                for row in result.result_set
+            ]
+
+    # -------------------------------------------------------------------------
+    # New Methods (FalkorDB-specific capabilities)
+    # -------------------------------------------------------------------------
+
+    async def hybrid_search(
+        self,
+        query_embedding: list[float],
+        entity_type_filter: str | None = None,
+        top_k: int = 10,
+        expand_neighbors: bool = True
+    ) -> list[dict[str, Any]]:
+        """
+        Hybrid search combining vector similarity with graph structure.
+
+        This is the primary retrieval method for RAG - it finds relevant
+        entities via embedding similarity and enriches them with graph context.
+
+        Parameters
+        ----------
+        query_embedding : list[float]
+            Query vector
+        entity_type_filter : str, optional
+            Filter by entity type (e.g., "Risk", "Person")
+        top_k : int
+            Number of results
+        expand_neighbors : bool
+            Include 1-hop neighbors in results
+
+        Returns
+        -------
+        list[dict]
+            Rich results with entity data and neighbor context
+        """
+        # Build optional filter clause
+        cypher_filter = ""
+        if entity_type_filter:
+            sanitize_label(entity_type_filter, "entity type filter")
+            cypher_filter = f"WHERE node.type = '{entity_type_filter}'"
+
+        return self.engine.hybrid_search(
+            query_vector=query_embedding,
+            label="Entity",
+            cypher_filter=cypher_filter,
+            top_k=top_k,
+            expand_neighbors=expand_neighbors
+        )
+
+    async def get_entity_context(self, entity_id: str) -> dict | None:
+        """
+        Get full context for an entity including its relationships.
+
+        Useful for building rich RAG context.
+        """
+        return self.engine.get_entity_by_id(entity_id)
+
+    async def get_chunk_with_entities(self, chunk_id: str) -> dict | None:
+        """
+        Get a chunk with all its mentioned entities.
+
+        Useful for building grounded responses.
+        """
+        return self.engine.get_chunk_context(chunk_id)
+
+
+# Factory function for backward compatibility
+async def get_graph_store() -> GraphStore:
+    """
+    Factory function to create a GraphStore instance.
+
+    This replaces the Neo4j driver-based initialization.
+    """
+    return GraphStore()

@@ -213,11 +213,12 @@ class TestPromptInjectionInRetriever:
         with patch("jenezis.rag.retriever.get_embedder"):
             retriever = HybridRetriever(mock_graph_store)
 
-        plan = await retriever._plan_cypher_query(payload)
+        plan = await retriever._plan_query(payload)
 
         # Verify the plan is valid and doesn't contain injection
         if plan:
             assert plan.get("intent") in [
+                "semantic_search",
                 "find_connections",
                 "find_mitigating_controls",
                 "get_attributes",
