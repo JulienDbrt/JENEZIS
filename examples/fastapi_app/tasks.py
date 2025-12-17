@@ -17,7 +17,8 @@ from jenezis.core.config import get_settings
 from jenezis.core.connections import get_db_session, get_neo4j_driver, get_s3_client
 from jenezis.storage.metadata_store import (
     Document, DocumentStatus, update_document_status, get_document_by_id,
-    EnrichmentQueueItem, EnrichmentStatus, CanonicalNode, NodeAlias
+    EnrichmentQueueItem, EnrichmentStatus, CanonicalNode, NodeAlias,
+    get_or_create_canonical_node, InvalidStatusTransitionError
 )
 from jenezis.storage.graph_store import GraphStore
 from jenezis.ingestion import parser, chunker, embedder, extractor
@@ -38,7 +39,13 @@ def handle_dead_letter(request, exc, traceback):
     logger.critical(error_message, extra={'traceback': traceback})
     if doc_id:
         async def update_status():
-            async with get_db_session() as db: await update_document_status(db, doc_id, DocumentStatus.FAILED, error_message)
+            async with get_db_session() as db:
+                try:
+                    # SECURITY: Now requires error_message for FAILED status
+                    await update_document_status(db, doc_id, DocumentStatus.FAILED, error_message)
+                except InvalidStatusTransitionError as e:
+                    # Document may already be in a terminal state
+                    logger.warning(f"Cannot mark doc {doc_id} as FAILED: {e}")
         import asyncio; asyncio.run(update_status())
 
 # --- Main Ingestion & Learning Loop Tasks ---
@@ -112,10 +119,26 @@ def enrich_unresolved_entity(item_id: int):
                 canonical_name = json.loads(response.choices[0].message.content)['canonical_name']
 
                 embedding = (await embedder.get_embedder().embed_batch([canonical_name]))[0]
-                new_node = CanonicalNode(node_type=item.entity_type, name=canonical_name, embedding=embedding)
-                db.add(new_node); await db.flush()
-                db.add(NodeAlias(alias=item.name, canonical_node_id=new_node.id, confidence_score=0.98))
-                
+
+                # SECURITY: Use atomic get_or_create to prevent race conditions
+                # This handles the case where two concurrent enrichment tasks
+                # try to create the same canonical node simultaneously
+                node, created = await get_or_create_canonical_node(
+                    db, name=canonical_name, node_type=item.entity_type, embedding=embedding
+                )
+
+                if created:
+                    logger.info(f"Created new canonical node '{canonical_name}'.")
+                else:
+                    logger.info(f"Found existing canonical node '{canonical_name}'.")
+
+                # Add the alias mapping (this may also race, but alias uniqueness is less critical)
+                existing_alias = await db.execute(
+                    select(NodeAlias).where(NodeAlias.alias == item.name)
+                )
+                if not existing_alias.scalars().first():
+                    db.add(NodeAlias(alias=item.name, canonical_node_id=node.id, confidence_score=0.98))
+
                 item.status = EnrichmentStatus.COMPLETED; await db.commit()
                 logger.info(f"Successfully enriched '{item.name}' as canonical node '{canonical_name}'.")
             except Exception as e:
@@ -138,7 +161,14 @@ def delete_document_task(document_id: int):
     logger.info(f"Starting deletion for doc {document_id}")
     try:
         async def run_async_delete():
-            async with get_db_session() as db: await update_document_status(db, document_id, DocumentStatus.DELETING)
+            async with get_db_session() as db:
+                try:
+                    await update_document_status(db, document_id, DocumentStatus.DELETING)
+                except InvalidStatusTransitionError as e:
+                    # Document is in a state that doesn't allow deletion
+                    logger.warning(f"Cannot delete doc {document_id}: {e}")
+                    raise
+
             await GraphStore(await get_neo4j_driver()).delete_document_and_associated_data(document_id)
             async with get_db_session() as db:
                 doc = await get_document_by_id(db, document_id)
@@ -147,10 +177,18 @@ def delete_document_task(document_id: int):
                     s3.delete_object(Bucket=bucket, Key=key)
                     await db.delete(doc); await db.commit()
         import asyncio; asyncio.run(run_async_delete())
+    except InvalidStatusTransitionError:
+        # Don't mark as failed for invalid transitions - just re-raise
+        raise
     except Exception as e:
         logger.error(f"Deletion failed for doc {document_id}: {e}", exc_info=True)
         async def update_status_on_fail():
-            async with get_db_session() as db: await update_document_status(db, document_id, DocumentStatus.FAILED, f"Deletion failed: {e}")
+            async with get_db_session() as db:
+                try:
+                    await update_document_status(db, document_id, DocumentStatus.FAILED, f"Deletion failed: {e}")
+                except InvalidStatusTransitionError:
+                    # Already in a terminal state, can't mark as failed
+                    logger.warning(f"Cannot mark doc {document_id} as FAILED - invalid transition")
         import asyncio; asyncio.run(update_status_on_fail()); raise
 
 @shared_task(name="tasks.run_garbage_collection")

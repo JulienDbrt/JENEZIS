@@ -4,6 +4,7 @@ deletions, and search. It handles the creation of nodes, relationships,
 vector indexes, and the clean purging of orphaned data.
 """
 import logging
+import re
 from typing import List, Dict, Any
 
 from neo4j import AsyncDriver
@@ -12,6 +13,109 @@ from jenezis.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+# --- Security: Cypher Label/Type Sanitization ---
+
+# Pattern for valid Neo4j labels/relationship types
+# Must start with letter, contain only alphanumeric and underscore
+SAFE_LABEL_PATTERN = re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
+
+# Maximum length for labels (Neo4j doesn't have strict limit but we impose one)
+MAX_LABEL_LENGTH = 64
+
+
+class InvalidLabelError(ValueError):
+    """Raised when an entity type or relationship type is invalid."""
+    pass
+
+
+def sanitize_label(label: str, label_kind: str = "entity type") -> str:
+    """
+    Sanitizes a Neo4j label or relationship type to prevent Cypher injection.
+
+    Args:
+        label: The label/type string to sanitize
+        label_kind: Description for error messages ("entity type" or "relationship type")
+
+    Returns:
+        The validated label string (unchanged if valid)
+
+    Raises:
+        InvalidLabelError: If the label contains dangerous characters or patterns
+    """
+    if not label:
+        raise InvalidLabelError(f"Empty {label_kind} is not allowed")
+
+    # Strip null bytes and control characters
+    cleaned = label.replace('\x00', '').strip()
+
+    # Check length
+    if len(cleaned) > MAX_LABEL_LENGTH:
+        raise InvalidLabelError(
+            f"{label_kind} '{cleaned[:20]}...' exceeds maximum length of {MAX_LABEL_LENGTH}"
+        )
+
+    # Validate against safe pattern
+    if not SAFE_LABEL_PATTERN.match(cleaned):
+        raise InvalidLabelError(
+            f"Invalid {label_kind} '{cleaned}'. "
+            f"Must start with a letter and contain only letters, numbers, and underscores."
+        )
+
+    # Additional checks for known injection patterns
+    dangerous_patterns = [
+        '`', "'", '"',  # Quote escapes
+        ']', '[',       # Array manipulation
+        ')', '(',       # Function/grouping
+        ';', '//',      # Statement terminator, comments
+        '\n', '\r',     # Newlines
+    ]
+    for pattern in dangerous_patterns:
+        if pattern in label:
+            raise InvalidLabelError(
+                f"Invalid {label_kind} '{label}': contains forbidden character '{pattern}'"
+            )
+
+    return cleaned
+
+
+def sanitize_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Sanitizes a list of entities, validating all type fields.
+
+    Args:
+        entities: List of entity dicts with 'id', 'name', 'type'
+
+    Returns:
+        The same list with validated types
+
+    Raises:
+        InvalidLabelError: If any entity has an invalid type
+    """
+    for entity in entities:
+        entity_type = entity.get('type', '')
+        sanitize_label(entity_type, "entity type")
+    return entities
+
+
+def sanitize_relations(relations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Sanitizes a list of relations, validating all type fields.
+
+    Args:
+        relations: List of relation dicts with 'source_id', 'target_id', 'type', 'chunk_id'
+
+    Returns:
+        The same list with validated types
+
+    Raises:
+        InvalidLabelError: If any relation has an invalid type
+    """
+    for relation in relations:
+        rel_type = relation.get('type', '')
+        sanitize_label(rel_type, "relationship type")
+    return relations
 
 class GraphStore:
     """
@@ -92,11 +196,21 @@ class GraphStore:
         based on the entity type from the ontology.
         - entities: [{'id', 'name', 'type'}]
         - relations: [{'source_id', 'target_id', 'type', 'chunk_id'}]
+
+        Raises:
+            InvalidLabelError: If any entity type or relation type fails validation
         """
+        # SECURITY: Sanitize all entity types and relation types BEFORE using in Cypher
+        # This prevents Cypher injection via malicious LLM output
+        sanitize_entities(entities)
+        if relations:
+            sanitize_relations(relations)
+
         # This operation is broken into two parts for clarity and robustness.
-        
+
         # 1. Merge Nodes with Dynamic Labels using APOC
         # We give each node a base 'Entity' label plus its specific type label.
+        # SECURITY NOTE: entity_data.type is now guaranteed to be safe (alphanumeric + underscore)
         node_query = """
         UNWIND $entities as entity_data
         // Use apoc.merge.node to handle dynamic labels from the entity type
@@ -115,6 +229,7 @@ class GraphStore:
 
         # 2. Merge Relationships between the now-existing nodes
         if relations:
+            # SECURITY NOTE: rel_data.type is now guaranteed to be safe
             relation_query = """
             UNWIND $relations as rel_data
             MATCH (source:Entity {canonical_id: rel_data.source_id})

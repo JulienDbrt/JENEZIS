@@ -71,8 +71,13 @@ alembic upgrade head
 ### Local Development (without Docker)
 ```bash
 poetry install
-poetry run uvicorn examples.fastapi_app.main:app --reload
-poetry run celery -A examples.fastapi_app.celery_config worker --loglevel=INFO
+poetry shell  # Activate virtualenv before running commands
+
+# API server
+uvicorn examples.fastapi_app.main:app --reload
+
+# Celery worker (separate terminal)
+celery -A examples.fastapi_app.celery_config worker --loglevel=INFO
 ```
 
 ## Architecture
@@ -108,8 +113,8 @@ The ingestion flow in `jenezis/ingestion/`:
 - **Generator** (`generator.py`): Streaming LLM responses with source citations
 
 ### API Endpoints (`examples/fastapi_app/main.py`)
-- `POST /ontologies`: Create domain config
-- `POST /upload?ontology_id=N`: Ingest document
+- `POST /domain-configs`: Create domain config (ontology)
+- `POST /upload?domain_config_id=N`: Ingest document
 - `POST /query`: RAG query with streaming response
 - `GET /status/{job_id}`: Check ingestion status
 
@@ -129,37 +134,47 @@ Neo4j requires the Enterprise edition with APOC plugin for dynamic label/relatio
 
 The adversarial test suite documents security vulnerabilities that are marked `xfail` (expected failure) to allow CI to pass while tracking issues. **These MUST be fixed before production deployment.**
 
-### Critical - Input Validation
+### Critical - Input Validation (FIXED)
 
-| Vulnerability | File | Test | Fix Required |
-|--------------|------|------|--------------|
-| **Path Traversal in S3 keys** | `main.py:138` | `test_path_traversal.py` | Sanitize filenames before S3 path construction |
-| **Null byte injection** | `main.py:138` | `test_path_traversal.py` | Strip null bytes from filenames |
-| **Protocol injection** | `main.py:138` | `test_path_traversal.py` | Block `s3://`, `file://`, `http://` in filenames |
-| **URL-encoded traversal** | `main.py:138` | `test_path_traversal.py` | Decode and validate after URL decoding |
+| Vulnerability | File | Status | Fix |
+|--------------|------|--------|-----|
+| **Path Traversal in S3 keys** | `main.py` | **FIXED** | `sanitize_filename()` strips path components |
+| **Null byte injection** | `main.py` | **FIXED** | `sanitize_filename()` removes null bytes |
+| **Protocol injection** | `main.py` | **FIXED** | `sanitize_filename()` rejects protocol prefixes |
+| **URL-encoded traversal** | `main.py` | **FIXED** | Double URL-decode before validation |
+| **File size DoS** | `main.py` | **FIXED** | `validate_upload_size()` with 50MB limit |
 
-### Critical - Prompt Injection
+### Critical - Prompt Injection (FIXED)
 
-| Vulnerability | File | Test | Fix Required |
-|--------------|------|------|--------------|
-| **Ontology schema injection** | `extractor.py` | `test_prompt_injection.py` | Sanitize entity/relation types in prompts |
-| **Retriever query injection** | `retriever.py` | `test_prompt_injection.py` | Sandbox LLM query planner output |
-| **Generator context injection** | `generator.py` | `test_prompt_injection.py` | Filter dangerous patterns from context |
+| Vulnerability | File | Status | Fix |
+|--------------|------|--------|-----|
+| **Ontology schema injection** | `extractor.py` | **FIXED** | `sanitize_ontology_schema()` strips dangerous chars |
+| **Retriever query injection** | `retriever.py` | **FIXED** | `validate_llm_json_output()` validates planner output |
+| **Generator context injection** | `generator.py` | **FIXED** | `sanitize_context_for_generation()` filters patterns |
 
-### High - State Management
+See `jenezis/core/prompt_security.py` for the security module.
 
-| Vulnerability | File | Test | Fix Required |
-|--------------|------|------|--------------|
-| **Invalid status transitions** | `metadata_store.py:107` | `test_state_machine_violations.py` | Add state machine validation to `update_document_status()` |
-| **Missing error_message for FAILED** | `metadata_store.py` | `test_state_machine_violations.py` | Require error_message when status=FAILED |
-| **Race condition in canonical nodes** | `resolver.py` | `test_race_conditions.py` | Use `INSERT ... ON CONFLICT` or distributed lock |
+### High - State Management (FIXED)
 
-### High - Resource Exhaustion
+| Vulnerability | File | Status | Fix |
+|--------------|------|--------|-----|
+| **Invalid status transitions** | `metadata_store.py` | **FIXED** | `validate_status_transition()` enforces state machine |
+| **Missing error_message for FAILED** | `metadata_store.py` | **FIXED** | `update_document_status()` requires error_message for FAILED |
+| **Race condition in canonical nodes** | `metadata_store.py` | **FIXED** | `get_or_create_canonical_node()` handles IntegrityError |
 
-| Vulnerability | File | Test | Fix Required |
-|--------------|------|------|--------------|
-| **No file size limit** | `main.py:129` | `test_file_upload_dos.py` | Check Content-Length before `await file.read()` |
-| **Content-Length mismatch** | `main.py:129` | `test_file_upload_dos.py` | Validate actual vs claimed size |
+### High - Cypher Injection (FIXED)
+
+| Vulnerability | File | Status | Fix |
+|--------------|------|--------|-----|
+| **Dynamic label injection** | `graph_store.py` | **FIXED** | `sanitize_label()` validates alphanumeric pattern |
+| **Relationship type injection** | `graph_store.py` | **FIXED** | `sanitize_relations()` rejects dangerous characters |
+
+### High - Resource Exhaustion (FIXED)
+
+| Vulnerability | File | Status | Fix |
+|--------------|------|--------|-----|
+| **No file size limit** | `main.py` | **FIXED** | `validate_upload_size()` checks Content-Length header |
+| **Content-Length mismatch** | `main.py` | **FIXED** | Chunked reading enforces actual size limit |
 
 ### Medium - Data Integrity
 
@@ -168,11 +183,25 @@ The adversarial test suite documents security vulnerabilities that are marked `x
 | **EnrichmentQueueItem lacks error field** | `metadata_store.py` | `test_orphan_creation.py` | Add `error_message` column |
 | **Timing attack on auth** | `security.py` | `test_security.py` | Use constant-time comparison |
 
+### Medium - Infrastructure Security (FIXED)
+
+| Vulnerability | File | Status | Fix |
+|--------------|------|--------|-----|
+| **Passwords in env vars** | `docker-compose.yml` | **FIXED** | Docker secrets at `/run/secrets/` |
+| **API keys in docker inspect** | `docker-compose.yml` | **FIXED** | Secrets mounted as files |
+
+See `docker/docker-compose.yml` for Docker secrets configuration.
+Secrets files are stored in `secrets/` directory (gitignored).
+
 ### Recommended Fixes Priority
 
-1. **Immediate**: Path traversal, file size limits (DoS vectors)
-2. **Before beta**: State machine validation, race conditions
-3. **Before production**: Prompt injection hardening, timing attacks
+1. ~~**Immediate**: Path traversal, file size limits (DoS vectors)~~ **DONE**
+2. ~~**Before beta**: State machine validation, race conditions, Cypher injection~~ **DONE**
+3. ~~**Before production**: Prompt injection hardening, Docker secrets~~ **DONE**
+
+**Remaining items (Low priority):**
+- Timing attack on auth (constant-time comparison)
+- EnrichmentQueueItem error field
 
 ### Running Only Passing Tests
 

@@ -1,6 +1,8 @@
 """
 RAG generator that takes a query, retrieves context, and streams a
 response from an LLM, including source citations.
+
+SECURITY: Uses prompt_security module to sanitize context before generation.
 """
 import json
 import logging
@@ -8,6 +10,10 @@ from typing import AsyncGenerator, List, Dict, Any, Tuple
 
 import openai
 from jenezis.core.config import get_settings
+from jenezis.core.prompt_security import (
+    sanitize_for_prompt,
+    sanitize_context_for_generation,
+)
 from jenezis.rag.retriever import HybridRetriever
 from jenezis.storage.cost_tracker import cost_tracker
 
@@ -70,15 +76,13 @@ class Generator:
             return empty_generator(), []
 
         # 2. Augment (create the prompt)
-        context_str = ""
-        for i, source in enumerate(sources):
-            doc_id = source.get('document_id', 'N/A')
-            chunk_id = source.get('chunk_id', 'N/A')
-            context_str += f"--- Context Document {i+1} (Source ID: doc-{doc_id}/chunk-{chunk_id}) ---\n"
-            context_str += source.get('text', '')
-            context_str += "\n\n"
+        # SECURITY: Sanitize context to prevent prompt injection via retrieved documents
+        context_str = sanitize_context_for_generation(sources)
 
-        prompt = f"User Question: {query}\n\n--- Context ---\n{context_str}"
+        # SECURITY: Also sanitize the user query
+        sanitized_query = sanitize_for_prompt(query, "user query")
+
+        prompt = f"User Question: {sanitized_query}\n\n--- Context ---\n{context_str}"
         
         logger.debug(f"Generated prompt for LLM. Length: {len(prompt)}")
         cost_tracker.estimate_cost(self.model, GENERATOR_SYSTEM_PROMPT + prompt, "input")

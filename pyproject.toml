@@ -50,6 +50,31 @@ spacy = "^3.7.4"
 # Add models like:
 # spacy-model-en_core_web_sm = "..."
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (require services)",
+    "adversarial: Security/adversarial tests",
+    "slow: Long-running tests (>30s)",
+    "evaluation: RAGAS evaluation tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+timeout = 120
+timeout_method = "thread"
+addopts = "-v --tb=short --strict-markers"
+log_cli = true
+log_cli_level = "WARNING"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

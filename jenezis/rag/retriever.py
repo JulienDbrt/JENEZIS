@@ -1,6 +1,9 @@
 """
 Hybrid retriever combining semantic vector search with advanced, LLM-driven
 graph-based reasoning.
+
+SECURITY: Uses prompt_security module to validate LLM query planner output
+and sanitize user queries before processing.
 """
 import asyncio
 import logging
@@ -9,11 +12,18 @@ import openai
 from typing import List, Dict, Any
 
 from jenezis.core.config import get_settings
+from jenezis.core.prompt_security import (
+    sanitize_for_prompt,
+    validate_llm_json_output,
+)
 from jenezis.ingestion.embedder import get_embedder
 from jenezis.storage.graph_store import GraphStore
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Allowed intents for the Cypher query planner
+ALLOWED_INTENTS = ["find_connections", "find_mitigating_controls", "get_attributes"]
 
 # --- LLM-driven Cypher Query Planner ---
 
@@ -98,18 +108,32 @@ class HybridRetriever:
         self.rrf_k = settings.RRF_K
 
     async def _plan_cypher_query(self, query: str) -> dict:
-        """Uses an LLM to create a structured query plan from a natural language question."""
+        """
+        Uses an LLM to create a structured query plan from a natural language question.
+
+        SECURITY: Sanitizes user query and validates LLM output to prevent injection.
+        """
+        # SECURITY: Sanitize the user query before including in prompt
+        sanitized_query = sanitize_for_prompt(query, "user query")
+
         try:
             response = await self.llm_client.chat.completions.create(
-                model=settings.EXTRACTION_MODEL, # Use a cheaper, fast model for planning
+                model=settings.EXTRACTION_MODEL,  # Use a cheaper, fast model for planning
                 messages=[
                     {"role": "system", "content": CYPHER_PLANNER_PROMPT},
-                    {"role": "user", "content": query}
+                    {"role": "user", "content": sanitized_query}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.0
             )
-            plan = json.loads(response.choices[0].message.content)
+            raw_plan = json.loads(response.choices[0].message.content)
+
+            # SECURITY: Validate LLM output to prevent injection via response
+            plan = validate_llm_json_output(raw_plan, allowed_intents=ALLOWED_INTENTS)
+            if not plan:
+                logger.warning("LLM query plan rejected due to validation failure")
+                return {}
+
             logger.info(f"LLM query plan generated: {plan}")
             return plan
         except Exception as e:

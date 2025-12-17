@@ -2,6 +2,7 @@
 
 import enum
 from datetime import datetime, timezone
+from typing import Set
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Enum, Text, ForeignKey, Boolean, Float
@@ -17,11 +18,50 @@ from jenezis.core.config import get_settings
 settings = get_settings()
 Base = declarative_base()
 
+
+# --- State Machine for Document Status ---
+
+class InvalidStatusTransitionError(ValueError):
+    """Raised when an invalid status transition is attempted."""
+    pass
+
 # --- Core Models for Ingestion and Status Tracking ---
 
 class DocumentStatus(enum.Enum):
     PENDING = "PENDING"; PROCESSING = "PROCESSING"; COMPLETED = "COMPLETED"
     FAILED = "FAILED"; UPDATING = "UPDATING"; DELETING = "DELETING"
+
+
+# Valid status transitions - maps current status to allowed next statuses
+VALID_STATUS_TRANSITIONS: dict[DocumentStatus, Set[DocumentStatus]] = {
+    DocumentStatus.PENDING: {DocumentStatus.PROCESSING, DocumentStatus.DELETING},
+    DocumentStatus.PROCESSING: {DocumentStatus.COMPLETED, DocumentStatus.FAILED},
+    DocumentStatus.COMPLETED: {DocumentStatus.UPDATING, DocumentStatus.DELETING},
+    DocumentStatus.FAILED: {DocumentStatus.DELETING},  # Must delete and re-upload to retry
+    DocumentStatus.UPDATING: {DocumentStatus.PROCESSING, DocumentStatus.DELETING},
+    DocumentStatus.DELETING: set(),  # Terminal state - no transitions allowed
+}
+
+
+def validate_status_transition(
+    current_status: DocumentStatus,
+    new_status: DocumentStatus
+) -> None:
+    """
+    Validates that a status transition is allowed.
+
+    Raises:
+        InvalidStatusTransitionError: If the transition is not valid.
+    """
+    if current_status == new_status:
+        return  # No-op transition is always allowed
+
+    allowed = VALID_STATUS_TRANSITIONS.get(current_status, set())
+    if new_status not in allowed:
+        raise InvalidStatusTransitionError(
+            f"Invalid status transition: {current_status.value} -> {new_status.value}. "
+            f"Allowed transitions from {current_status.value}: {[s.value for s in allowed]}"
+        )
 
 class Document(Base):
     __tablename__ = "documents"
@@ -104,12 +144,106 @@ async def get_document_by_id(db: AsyncSession, doc_id: int) -> Document | None:
     result = await db.execute(select(Document).where(Document.id == doc_id))
     return result.scalars().first()
 
-async def update_document_status(db: AsyncSession, doc_id: int, status: DocumentStatus, error_message: str | None = None) -> Document | None:
+async def update_document_status(
+    db: AsyncSession,
+    doc_id: int,
+    status: DocumentStatus,
+    error_message: str | None = None
+) -> Document | None:
+    """
+    Updates a document's status with state machine validation.
+
+    Args:
+        db: Database session
+        doc_id: Document ID to update
+        status: New status to set
+        error_message: Error message (required when setting FAILED status)
+
+    Returns:
+        Updated Document or None if not found
+
+    Raises:
+        InvalidStatusTransitionError: If the transition is not valid
+        ValueError: If setting FAILED status without an error_message
+    """
     doc = await get_document_by_id(db, doc_id)
-    if doc:
-        doc.status = status; doc.error_log = error_message
-        await db.commit(); await db.refresh(doc)
+    if not doc:
+        return None
+
+    # SECURITY: Validate state machine transition
+    validate_status_transition(doc.status, status)
+
+    # SECURITY: Require error_message when setting FAILED status
+    if status == DocumentStatus.FAILED and not error_message:
+        raise ValueError("error_message is required when setting status to FAILED")
+
+    doc.status = status
+    doc.error_log = error_message
+    await db.commit()
+    await db.refresh(doc)
     return doc
+
+async def get_or_create_canonical_node(
+    db: AsyncSession,
+    name: str,
+    node_type: str,
+    embedding: list[float],
+) -> tuple[CanonicalNode, bool]:
+    """
+    Atomically gets or creates a canonical node, handling race conditions.
+
+    Uses INSERT ... ON CONFLICT pattern to prevent duplicate nodes when
+    multiple concurrent tasks try to create the same entity.
+
+    Args:
+        db: Database session
+        name: Canonical name (unique)
+        node_type: Entity type
+        embedding: Vector embedding
+
+    Returns:
+        Tuple of (CanonicalNode, created) where created is True if new node was created
+
+    Note:
+        This function commits the transaction to ensure atomicity.
+    """
+    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    # First, try to find existing node
+    result = await db.execute(
+        select(CanonicalNode).where(CanonicalNode.name == name)
+    )
+    existing = result.scalars().first()
+    if existing:
+        return existing, False
+
+    # Try to create - handle race condition with IntegrityError
+    try:
+        new_node = CanonicalNode(
+            name=name,
+            node_type=node_type,
+            embedding=embedding,
+        )
+        db.add(new_node)
+        await db.flush()
+        return new_node, True
+    except IntegrityError:
+        # Race condition - another process created the node first
+        # Rollback the failed insert and fetch the existing node
+        await db.rollback()
+
+        # Re-fetch the node that was created by the other process
+        result = await db.execute(
+            select(CanonicalNode).where(CanonicalNode.name == name)
+        )
+        existing = result.scalars().first()
+        if existing:
+            return existing, False
+
+        # If still not found, something else went wrong
+        raise ValueError(f"Failed to get or create canonical node '{name}'")
+
 
 # Alias for backwards compatibility
 Ontology = DomainConfig

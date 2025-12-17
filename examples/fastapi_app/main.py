@@ -6,11 +6,14 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
+from pathlib import PurePosixPath
 from typing import List, Any
+from urllib.parse import unquote
 
 from celery import chain
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Body, Request
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.status import (
@@ -18,6 +21,7 @@ from starlette.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
     HTTP_409_CONFLICT,
+    HTTP_413_REQUEST_ENTITY_TOO_LARGE,
 )
 
 import secrets
@@ -48,6 +52,114 @@ from jenezis.rag.retriever import HybridRetriever
 from jenezis.rag.generator import Generator
 from jenezis.utils.logging import setup_logging
 from .tasks import process_document, delete_document_task
+
+# --- Security Constants ---
+MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+ALLOWED_FILENAME_PATTERN = re.compile(r'^[\w\-. ]+$')  # Alphanumeric, dash, dot, space
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize a filename to prevent path traversal and injection attacks.
+
+    - Strips null bytes
+    - URL-decodes the filename
+    - Extracts only the basename (no directory components)
+    - Blocks protocol prefixes (s3://, file://, http://, etc.)
+    - Replaces dangerous characters with underscores
+    - Limits length to 255 characters
+
+    Returns a safe filename or raises HTTPException if filename is invalid.
+    """
+    if not filename:
+        raise HTTPException(
+            status_code=HTTP_400_BAD_REQUEST,
+            detail="Filename is required."
+        )
+
+    # Strip null bytes (can truncate filename in C-based systems)
+    sanitized = filename.replace('\x00', '')
+
+    # URL-decode to catch encoded traversal attempts (%2e%2e%2f = ../)
+    sanitized = unquote(unquote(sanitized))  # Double decode for %252e attacks
+
+    # Block protocol prefixes
+    protocol_pattern = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', re.IGNORECASE)
+    if protocol_pattern.match(sanitized):
+        raise HTTPException(
+            status_code=HTTP_400_BAD_REQUEST,
+            detail="Protocol prefixes not allowed in filename."
+        )
+
+    # Extract basename only - removes ALL directory components
+    # Use PurePosixPath to handle both / and \ separators
+    sanitized = PurePosixPath(sanitized.replace('\\', '/')).name
+
+    # If after stripping path components we have nothing, reject
+    if not sanitized or sanitized in ('.', '..'):
+        raise HTTPException(
+            status_code=HTTP_400_BAD_REQUEST,
+            detail="Invalid filename after sanitization."
+        )
+
+    # Replace any remaining dangerous characters with underscore
+    # Keep only: alphanumeric, dash, underscore, dot, space
+    sanitized = re.sub(r'[^\w\-. ]', '_', sanitized)
+
+    # Collapse multiple underscores/dots
+    sanitized = re.sub(r'[_.]{2,}', '_', sanitized)
+
+    # Limit length
+    if len(sanitized) > 255:
+        name, ext = sanitized.rsplit('.', 1) if '.' in sanitized else (sanitized, '')
+        max_name_len = 255 - len(ext) - 1 if ext else 255
+        sanitized = f"{name[:max_name_len]}.{ext}" if ext else name[:255]
+
+    return sanitized
+
+
+async def validate_upload_size(request: Request, file: UploadFile) -> bytes:
+    """
+    Validate file size before fully reading into memory.
+
+    - Checks Content-Length header first (fast rejection)
+    - Reads file in chunks to enforce actual size limit
+    - Returns file contents if valid
+
+    Raises HTTPException 413 if file exceeds MAX_UPLOAD_SIZE_BYTES.
+    """
+    # Check Content-Length header for early rejection
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared_size = int(content_length)
+            if declared_size > MAX_UPLOAD_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_BYTES // (1024*1024)} MB."
+                )
+        except ValueError:
+            pass  # Invalid Content-Length, will verify actual size
+
+    # Read file in chunks to enforce actual size limit
+    chunks = []
+    total_size = 0
+    chunk_size = 64 * 1024  # 64 KB chunks
+
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_BYTES // (1024*1024)} MB."
+            )
+        chunks.append(chunk)
+
+    return b''.join(chunks)
+
 
 # --- App State & Pydantic Schemas ---
 app_state = {}
@@ -121,28 +233,34 @@ async def get_ontology(ontology_id: int, db: AsyncSession = Depends(get_db_sessi
 # --- Document & RAG Endpoints ---
 @app.post("/upload", status_code=HTTP_202_ACCEPTED, dependencies=[Depends(get_api_key)])
 async def upload_document(
+    request: Request,
     ontology_id: int | None = None,
     file: UploadFile = File(...)
 ):
     s3_client = get_s3_client()
     settings = get_settings()
-    contents = await file.read()
+
+    # SECURITY: Validate file size before loading into memory
+    contents = await validate_upload_size(request, file)
     file_hash = hashlib.sha256(contents).hexdigest()
+
+    # SECURITY: Sanitize filename to prevent path traversal
+    safe_filename = sanitize_filename(file.filename)
 
     async with get_db_session() as db:
         if await get_document_by_hash(db, file_hash):
             raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Document with same content already exists.")
         if ontology_id and not await db.get(Ontology, ontology_id):
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=f"Ontology with id {ontology_id} not found.")
-        
-        s3_path = f"{settings.S3_BUCKET_NAME}/{file_hash}_{file.filename}"
-        bucket, key = s3_path.split('/', 1)
-        s3_client.put_object(Bucket=bucket, Key=key, Body=contents)
+
+        # SECURITY: Use hash-prefixed key to prevent any filename manipulation
+        s3_key = f"{file_hash}_{safe_filename}"
+        s3_client.put_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key, Body=contents)
 
         new_doc = Document(
-            filename=file.filename,
+            filename=safe_filename,
             document_hash=file_hash,
-            s3_path=s3_path,
+            s3_path=f"{settings.S3_BUCKET_NAME}/{s3_key}",
             status=DocumentStatus.PENDING,
             domain_config_id=ontology_id,
         )
@@ -155,6 +273,7 @@ async def upload_document(
 
 @app.put("/documents/{document_id}", status_code=HTTP_202_ACCEPTED, dependencies=[Depends(get_api_key)])
 async def update_document(
+    request: Request,
     document_id: int,
     file: UploadFile = File(...),
     ontology_id: int | None = None,
@@ -167,14 +286,22 @@ async def update_document(
 
     s3_client = get_s3_client()
     settings = get_settings()
-    contents = await file.read()
+
+    # SECURITY: Validate file size before loading into memory
+    contents = await validate_upload_size(request, file)
     file_hash = hashlib.sha256(contents).hexdigest()
+
+    # SECURITY: Sanitize filename to prevent path traversal
+    safe_filename = sanitize_filename(file.filename)
+
+    # SECURITY: Use hash-prefixed key to prevent any filename manipulation
+    s3_key = f"{file_hash}_{safe_filename}"
 
     async with get_db_session() as db:
         new_doc = Document(
-            filename=file.filename,
+            filename=safe_filename,
             document_hash=file_hash,
-            s3_path=f"{settings.S3_BUCKET_NAME}/{file_hash}_{file.filename}",
+            s3_path=f"{settings.S3_BUCKET_NAME}/{s3_key}",
             status=DocumentStatus.PENDING,
             domain_config_id=ontology_id,
         )
@@ -182,11 +309,11 @@ async def update_document(
         await db.commit()
         await db.refresh(new_doc)
 
-        s3_client.put_object(Bucket=settings.S3_BUCKET_NAME, Key=f"{file_hash}_{file.filename}", Body=contents)
+        s3_client.put_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key, Body=contents)
 
         update_chain = chain(delete_document_task.s(document_id=document_id), process_document.s(document_id=new_doc.id))
         update_chain.delay()
-    
+
     return {"detail": "Document update process initiated.", "old_document_id": document_id, "new_job_id": new_doc.id}
 
 @app.get("/status/{job_id}", dependencies=[Depends(get_api_key)])

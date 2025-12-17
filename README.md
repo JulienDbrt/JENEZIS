@@ -133,9 +133,3 @@ JENEZIS is licensed under the **Business Source License 1.1 (BSL 1.1)**.
 - **Commercial licensing**: Contact <jdabert@sigilum.fr>
 
 See [LICENSE](LICENSE) for full details.
-
----
-
-## Contact
-
-For commercial licensing, support, or inquiries: jdabert@sigilum.fr

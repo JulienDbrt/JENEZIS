@@ -96,22 +96,19 @@ class TestAPIKeyAuthentication:
         """Missing Authorization header should raise HTTPException 403."""
         from fastapi import HTTPException
 
-        # Mock request without Authorization header
-        with patch("jenezis.core.security.get_db_session") as mock_get_db:
-            mock_get_db.return_value.__aenter__ = AsyncMock()
-            mock_get_db.return_value.__aexit__ = AsyncMock()
+        # The get_api_key function raises 403 immediately if api_key_header is None,
+        # before the db dependency is even accessed
+        with pytest.raises(HTTPException) as exc_info:
+            await get_api_key(api_key_header=None, db=AsyncMock())
 
-            with pytest.raises(HTTPException) as exc_info:
-                await get_api_key(api_key_header=None)
-
-            assert exc_info.value.status_code == 403
+        assert exc_info.value.status_code == 403
 
     async def test_empty_bearer_token_raises_403(self):
         """'Bearer ' with empty token should raise HTTPException 403."""
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_api_key(api_key_header="Bearer ")
+            await get_api_key(api_key_header="Bearer ", db=AsyncMock())
 
         assert exc_info.value.status_code == 403
 
@@ -120,7 +117,7 @@ class TestAPIKeyAuthentication:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_api_key(api_key_header="Basic dXNlcjpwYXNz")
+            await get_api_key(api_key_header="Basic dXNlcjpwYXNz", db=AsyncMock())
 
         assert exc_info.value.status_code == 403
 
@@ -131,14 +128,14 @@ class TestAPIKeyAuthentication:
 
         malformed_headers = [
             "BearerToken",  # No space
-            "bearer token",  # Wrong case for scheme
+            "bearer token",  # Wrong case for scheme (currently accepted)
             "  Bearer token",  # Leading spaces
             "Bearer",  # No token
         ]
 
         for header in malformed_headers:
             with pytest.raises(HTTPException) as exc_info:
-                await get_api_key(api_key_header=header)
+                await get_api_key(api_key_header=header, db=AsyncMock())
 
             assert exc_info.value.status_code == 403, f"Failed for header: {header}"
 
@@ -157,12 +154,16 @@ class TestTimingAttackResistance:
         """
         from fastapi import HTTPException
 
+        # Mock db that returns None (invalid key)
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))))
+
         # Time multiple invalid key attempts
         times = []
         for i in range(5):
             start = time.perf_counter()
             try:
-                await get_api_key(api_key_header=f"Bearer invalid-key-{i}")
+                await get_api_key(api_key_header=f"Bearer invalid-key-{i}", db=mock_db)
             except HTTPException:
                 pass
             end = time.perf_counter()

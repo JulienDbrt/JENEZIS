@@ -2,6 +2,8 @@
 Entity and Relationship extractor using an LLM.
 This module is designed to be pluggable with different models,
 prioritizing cost-effectiveness.
+
+SECURITY: Uses prompt_security module to sanitize inputs before LLM calls.
 """
 import asyncio
 import logging
@@ -11,6 +13,10 @@ import openai
 from pydantic import BaseModel, Field
 
 from jenezis.core.config import get_settings
+from jenezis.core.prompt_security import (
+    sanitize_for_prompt,
+    sanitize_ontology_schema,
+)
 from jenezis.storage.cost_tracker import cost_tracker
 
 logger = logging.getLogger(__name__)
@@ -32,12 +38,19 @@ class ExtractionResult(BaseModel):
     relations: List[ExtractedRelation]
 
 def _create_dynamic_prompt(ontology_schema: Dict[str, Any]) -> str:
-    """Generates a system prompt based on a dynamic ontology schema."""
-    entity_types = ontology_schema.get("entity_types", [])
-    relation_types = ontology_schema.get("relation_types", [])
+    """
+    Generates a system prompt based on a dynamic ontology schema.
+
+    SECURITY: The ontology_schema is sanitized before inclusion in the prompt
+    to prevent injection via malicious entity/relation type names.
+    """
+    # SECURITY: Sanitize ontology schema to prevent injection
+    sanitized_schema = sanitize_ontology_schema(ontology_schema)
+    entity_types = sanitized_schema.get("entity_types", [])
+    relation_types = sanitized_schema.get("relation_types", [])
 
     if not entity_types:
-        return "" # Cannot extract without entity types
+        return ""  # Cannot extract without entity types
 
     prompt = (
         "You are an expert knowledge graph extractor. Your task is to identify entities and their relationships from the provided text "
@@ -74,23 +87,31 @@ class Extractor:
             raise ValueError(f"Unsupported LLM provider for extraction: {self.provider}")
 
     async def extract_from_chunk(self, chunk_text: str, ontology_schema: Dict[str, Any]) -> ExtractionResult:
-        """Extracts entities and relations from a single text chunk based on a dynamic ontology."""
+        """
+        Extracts entities and relations from a single text chunk based on a dynamic ontology.
+
+        SECURITY: Both chunk_text and ontology_schema are sanitized to prevent
+        prompt injection attacks.
+        """
         if not chunk_text.strip() or not ontology_schema:
             return ExtractionResult(entities=[], relations=[])
-        
+
         system_prompt = _create_dynamic_prompt(ontology_schema)
         if not system_prompt:
             logger.warning("Skipping extraction due to empty ontology schema.")
             return ExtractionResult(entities=[], relations=[])
 
+        # SECURITY: Sanitize chunk text to prevent prompt injection
+        sanitized_chunk = sanitize_for_prompt(chunk_text, "chunk text")
+
         try:
-            cost_tracker.estimate_cost(self.model, system_prompt + chunk_text, "input")
+            cost_tracker.estimate_cost(self.model, system_prompt + sanitized_chunk, "input")
 
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": chunk_text}
+                    {"role": "user", "content": sanitized_chunk}
                 ],
                 temperature=0.0,
                 response_format={"type": "json_object"},

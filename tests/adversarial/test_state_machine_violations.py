@@ -15,6 +15,7 @@ from jenezis.storage.metadata_store import (
     Document,
     DocumentStatus,
     update_document_status,
+    InvalidStatusTransitionError,
 )
 
 
@@ -104,17 +105,19 @@ class TestDocumentStatusStateMachine:
         await test_db_session.refresh(doc)
 
         # Attempt transition
+        # Note: FAILED status requires error_message
+        error_msg = "Test failure message" if to_status == DocumentStatus.FAILED else None
         result = await update_document_status(
             test_db_session,
             doc.id,
             to_status,
+            error_message=error_msg,
         )
 
         # Should succeed
         assert result is not None
         assert result.status == to_status
 
-    @pytest.mark.xfail(reason="KNOWN VULNERABILITY: State machine validation not implemented - see CLAUDE.md")
     @pytest.mark.parametrize("from_status,to_status,reason", INVALID_TRANSITIONS)
     async def test_invalid_transition_blocked(
         self,
@@ -126,9 +129,8 @@ class TestDocumentStatusStateMachine:
         """
         Verify that invalid status transitions are blocked.
 
-        NOTE: This test documents EXPECTED behavior. Currently the code
-        does NOT validate transitions, so these tests will FAIL until
-        validation is implemented.
+        State machine validation is now implemented - invalid transitions
+        raise InvalidStatusTransitionError.
         """
         # Create document with initial status
         doc = Document(
@@ -142,24 +144,17 @@ class TestDocumentStatusStateMachine:
         await test_db_session.commit()
         await test_db_session.refresh(doc)
 
-        # Attempt invalid transition
-        # EXPECTED: Should raise ValueError or return None
-        # ACTUAL (vulnerable): Will succeed
-
-        result = await update_document_status(
-            test_db_session,
-            doc.id,
-            to_status,
-        )
-
-        # Document the vulnerability
-        if result and result.status == to_status:
-            pytest.fail(
-                f"VULNERABILITY: Invalid transition allowed!\n"
-                f"From: {from_status.value} -> To: {to_status.value}\n"
-                f"Reason this should be blocked: {reason}\n"
-                "RECOMMENDATION: Add state machine validation to update_document_status"
+        # Attempt invalid transition - should raise exception
+        with pytest.raises(InvalidStatusTransitionError) as exc_info:
+            await update_document_status(
+                test_db_session,
+                doc.id,
+                to_status,
             )
+
+        # Verify the error message is informative
+        assert from_status.value in str(exc_info.value)
+        assert to_status.value in str(exc_info.value)
 
 
 class TestStatusTransitionSideEffects:
@@ -197,10 +192,12 @@ class TestStatusTransitionSideEffects:
         # Document expected behavior
         assert result is not None  # Currently succeeds without validation
 
-    @pytest.mark.xfail(reason="KNOWN VULNERABILITY: error_message not required for FAILED status - see CLAUDE.md")
     async def test_failed_status_requires_error_log(self, test_db_session):
         """
-        Verify that marking a document FAILED includes an error message.
+        Verify that marking a document FAILED requires an error message.
+
+        This validation is now implemented - attempting to set FAILED status
+        without an error_message raises ValueError.
         """
         doc = Document(
             filename="test.pdf",
@@ -213,23 +210,16 @@ class TestStatusTransitionSideEffects:
         await test_db_session.commit()
         await test_db_session.refresh(doc)
 
-        # Mark as failed without error message
-        result = await update_document_status(
-            test_db_session,
-            doc.id,
-            DocumentStatus.FAILED,
-            error_message=None,  # No error message!
-        )
+        # Attempting to mark as failed without error message should raise
+        with pytest.raises(ValueError) as exc_info:
+            await update_document_status(
+                test_db_session,
+                doc.id,
+                DocumentStatus.FAILED,
+                error_message=None,  # No error message!
+            )
 
-        # EXPECTED: Should require error_message for FAILED status
-        # ACTUAL: Allows empty error_log
-
-        if result and result.status == DocumentStatus.FAILED:
-            if not result.error_log:
-                pytest.fail(
-                    "VULNERABILITY: Document marked FAILED without error_log!\n"
-                    "RECOMMENDATION: Require error_message when setting FAILED status"
-                )
+        assert "error_message is required" in str(exc_info.value)
 
 
 class TestConcurrentStatusConflicts:
