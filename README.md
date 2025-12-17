@@ -138,6 +138,4 @@ See [LICENSE](LICENSE) for full details.
 
 ## Contact
 
-For commercial licensing, support, or inquiries:
-- Email: <jdabert@sigilum.fr>
-- Project: SIGILUM
+For commercial licensing, support, or inquiries: jdabert@sigilum.fr
