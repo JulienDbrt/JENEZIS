@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
 
 from jenezis.core.config import get_settings
-from jenezis.core.connections import get_db_session, get_neo4j_driver, get_s3_client
+from jenezis.core.connections import get_db_session, get_s3_client
 from jenezis.storage.metadata_store import (
     Document, DocumentStatus, update_document_status, get_document_by_id,
     EnrichmentQueueItem, EnrichmentStatus, CanonicalNode, NodeAlias,
@@ -57,7 +57,7 @@ def process_document(self, document_id: int):
     try:
         doc_embedder = embedder.get_embedder()
         async def run_async_pipeline():
-            graph_store = GraphStore(await get_neo4j_driver())
+            graph_store = GraphStore()
             async with get_db_session() as db:
                 doc = (await db.execute(select(Document).options(selectinload(Document.domain_config)).filter(Document.id == document_id))).scalars().one_or_none()
                 if not doc: raise ValueError(f"Doc {document_id} not found.")
@@ -169,7 +169,7 @@ def delete_document_task(document_id: int):
                     logger.warning(f"Cannot delete doc {document_id}: {e}")
                     raise
 
-            await GraphStore(await get_neo4j_driver()).delete_document_and_associated_data(document_id)
+            await GraphStore().delete_document_and_associated_data(document_id)
             async with get_db_session() as db:
                 doc = await get_document_by_id(db, document_id)
                 if doc:
@@ -195,7 +195,7 @@ def delete_document_task(document_id: int):
 def run_garbage_collection():
     logger.info("Starting garbage collection task...")
     try:
-        async def run_async_gc(): await GraphStore(await get_neo4j_driver()).garbage_collect_orphaned_entities()
+        async def run_async_gc(): await GraphStore().garbage_collect_orphaned_entities()
         import asyncio; asyncio.run(run_async_gc())
     except Exception as e:
         logger.error(f"Garbage collection task failed: {e}", exc_info=True); raise

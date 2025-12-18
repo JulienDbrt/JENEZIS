@@ -156,16 +156,18 @@ class FalkorEngine:
         self._validate_identifier(label, "label")
         self._validate_identifier(property_name, "property")
 
-        # FalkorDB vector index creation syntax
+        # FalkorDB vector index creation syntax (v4.0+)
+        # https://docs.falkordb.com/cypher/indexing/vector-index
         cypher = (
-            f"CALL db.idx.vector.createNodeIndex("
-            f"'{label}', '{property_name}', '{similarity}', {dimensions})"
+            f"CREATE VECTOR INDEX FOR (n:{label}) ON (n.{property_name}) "
+            f"OPTIONS {{dimension:{dimensions}, similarityFunction:'{similarity}'}}"
         )
         try:
             self.query(cypher)
             logger.info(f"Vector index created: :{label}({property_name})")
         except Exception as e:
-            if "already exists" in str(e).lower():
+            err_str = str(e).lower()
+            if "already exists" in err_str or "already indexed" in err_str or "index already" in err_str:
                 logger.debug(f"Vector index already exists: :{label}({property_name})")
             else:
                 raise
@@ -189,7 +191,8 @@ class FalkorEngine:
             self.query(cypher)
             logger.info(f"Property index created: :{label}({property_name})")
         except Exception as e:
-            if "already exists" in str(e).lower():
+            err_str = str(e).lower()
+            if "already exists" in err_str or "already indexed" in err_str or "index already" in err_str:
                 logger.debug(f"Property index already exists: :{label}({property_name})")
             else:
                 raise
@@ -247,8 +250,12 @@ class FalkorEngine:
         """
         self._validate_identifier(label, "label")
 
+        # FalkorDB requires vecf32() wrapper for vector queries
+        # We inject the vector directly into the query as vecf32([...])
+        vec_str = ", ".join(str(v) for v in query_vector)
+
         cypher = f"""
-            CALL db.idx.vector.queryNodes('{label}', '{property_name}', {top_k}, $vec)
+            CALL db.idx.vector.queryNodes('{label}', '{property_name}', {top_k}, vecf32([{vec_str}]))
             YIELD node, score
             RETURN node.id AS id,
                    node.name AS name,
@@ -257,7 +264,7 @@ class FalkorEngine:
             ORDER BY score DESC
         """
 
-        result = self.query(cypher, {"vec": query_vector})
+        result = self.query(cypher)
         return [
             {"id": row[0], "name": row[1], "type": row[2], "score": row[3]}
             for row in result.result_set
@@ -299,9 +306,11 @@ class FalkorEngine:
         self._validate_identifier(label, "label")
 
         # Phase 1: Vector search with optional filter
-        # Note: cypher_filter should be sanitized by caller (from DomainConfig)
+        # FalkorDB requires vecf32() wrapper for vector queries
+        vec_str = ", ".join(str(v) for v in query_vector)
+
         vector_cypher = f"""
-            CALL db.idx.vector.queryNodes('{label}', 'embedding', {top_k * 2}, $vec)
+            CALL db.idx.vector.queryNodes('{label}', 'embedding', {top_k * 2}, vecf32([{vec_str}]))
             YIELD node, score
             {cypher_filter}
             RETURN node, score
@@ -309,7 +318,7 @@ class FalkorEngine:
             LIMIT {top_k}
         """
 
-        vector_results = self.query(vector_cypher, {"vec": query_vector})
+        vector_results = self.query(vector_cypher)
 
         results = []
         for row in vector_results.result_set:
@@ -388,19 +397,26 @@ class FalkorEngine:
         # Sanitize chunks
         sanitized = [self._sanitize_document(c, ["id"]) for c in chunks]
 
-        cypher = """
-            MATCH (d:Document {id: $doc_id})
-            UNWIND $chunks AS chunk
-            MERGE (c:Chunk {id: chunk.id})
-            ON CREATE SET c.text = chunk.text,
-                          c.embedding = chunk.embedding,
-                          c.created_at = timestamp()
-            ON MATCH SET c.text = chunk.text,
-                         c.embedding = chunk.embedding,
-                         c.updated_at = timestamp()
-            MERGE (d)-[:HAS_CHUNK]->(c)
-        """
-        self.query(cypher, {"doc_id": document_id, "chunks": sanitized})
+        # FalkorDB requires embeddings to be stored using vecf32() for vector index
+        # We process chunks one at a time to use the vecf32() function
+        for chunk in sanitized:
+            vec_str = ", ".join(str(v) for v in chunk.get("embedding", []))
+            cypher = f"""
+                MATCH (d:Document {{id: $doc_id}})
+                MERGE (c:Chunk {{id: $chunk_id}})
+                ON CREATE SET c.text = $text,
+                              c.embedding = vecf32([{vec_str}]),
+                              c.created_at = timestamp()
+                ON MATCH SET c.text = $text,
+                             c.embedding = vecf32([{vec_str}]),
+                             c.updated_at = timestamp()
+                MERGE (d)-[:HAS_CHUNK]->(c)
+            """
+            self.query(cypher, {
+                "doc_id": document_id,
+                "chunk_id": chunk.get("id"),
+                "text": chunk.get("text", "")
+            })
 
     # -------------------------------------------------------------------------
     # Entity & Relation Operations

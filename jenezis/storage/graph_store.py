@@ -260,9 +260,10 @@ class GraphStore:
         list[dict]
             Results with keys: chunk_id, text, score, document_id
         """
-        # Search chunks by embedding
-        cypher = """
-            CALL db.idx.vector.queryNodes('Chunk', 'embedding', $top_k, $vec)
+        # Search chunks by embedding - FalkorDB requires vecf32() wrapper
+        vec_str = ", ".join(str(v) for v in query_embedding)
+        cypher = f"""
+            CALL db.idx.vector.queryNodes('Chunk', 'embedding', {top_k}, vecf32([{vec_str}]))
             YIELD node, score
             MATCH (d:Document)-[:HAS_CHUNK]->(node)
             RETURN node.id AS chunk_id,
@@ -272,7 +273,7 @@ class GraphStore:
             ORDER BY score DESC
         """
         try:
-            result = self.engine.query(cypher, {"top_k": top_k, "vec": query_embedding})
+            result = self.engine.query(cypher)
             return [
                 {
                     "chunk_id": row[0],

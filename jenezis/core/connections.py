@@ -11,6 +11,7 @@ from celery import Celery
 from neo4j import AsyncGraphDatabase
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import NullPool
 
 from jenezis.core.config import get_settings
 
@@ -31,8 +32,13 @@ celery_app.conf.update(
 
 
 # --- Metadata Store (SQLAlchemy) ---
+# Use NullPool to avoid connection sharing issues in forked Celery workers
+# NullPool creates new connections each time and closes them immediately after use
 try:
-    sql_engine = create_async_engine(settings.METADATA_STORE_URL, pool_pre_ping=True)
+    sql_engine = create_async_engine(
+        settings.METADATA_STORE_URL,
+        poolclass=NullPool,  # Critical for Celery worker compatibility
+    )
     AsyncSessionFactory = async_sessionmaker(
         sql_engine, expire_on_commit=False, class_=AsyncSession
     )

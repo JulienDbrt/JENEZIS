@@ -35,7 +35,6 @@ from jenezis.core.connections import (
     get_db_session,
     get_db_session_dep,
     get_s3_client,
-    get_neo4j_driver,
     sql_engine,
 )
 from jenezis.core.security import get_api_key, get_key_hash
@@ -192,7 +191,7 @@ async def lifespan(app: FastAPI):
             db.add(first_key)
             await db.commit()
             logger.info("Successfully provisioned initial admin API key.")
-    graph_store = GraphStore(await get_neo4j_driver())
+    graph_store = GraphStore()  # Uses FalkorDB via FalkorEngine
     await graph_store.initialize_constraints_and_indexes()
     logger.info("Graph constraints and indexes ensured.")
     retriever = HybridRetriever(graph_store)
