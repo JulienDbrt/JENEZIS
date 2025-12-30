@@ -251,7 +251,11 @@ def validate_llm_json_output(
         if isinstance(params, dict):
             params_str = str(params)
             # Check for Cypher injection patterns
-            dangerous_cypher = ["DETACH DELETE", "DROP ", "LOAD CSV", "CALL dbms."]
+            dangerous_cypher = [
+                "DETACH DELETE", "DROP", "LOAD CSV", "CALL dbms.",
+                "CREATE", "SET", "REMOVE", "DELETE", "MERGE",
+                "apoc.load", "apoc.run", "UNION"
+            ]
             for pattern in dangerous_cypher:
                 if pattern.upper() in params_str.upper():
                     logger.warning(f"Dangerous Cypher pattern in LLM output: {pattern}")
