@@ -132,9 +132,10 @@ class EnrichmentQueueItem(Base):
 
 # --- Helper Functions (remain largely the same) ---
 
-async def get_api_key_by_hash(db: AsyncSession, key_hash: str) -> APIKey | None:
-    result = await db.execute(select(APIKey).where(APIKey.key_hash == key_hash, APIKey.is_active == True))
-    return result.scalars().first()
+async def get_all_active_api_keys(db: AsyncSession) -> list[APIKey]:
+    """Retrieves all active API keys from the database."""
+    result = await db.execute(select(APIKey).where(APIKey.is_active == True))
+    return result.scalars().all()
 
 async def get_document_by_hash(db: AsyncSession, doc_hash: str) -> Document | None:
     result = await db.execute(select(Document).where(Document.document_hash == doc_hash))
