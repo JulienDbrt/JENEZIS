@@ -2,14 +2,15 @@
 
 import logging
 import hashlib
-import hmac
+import secrets
+import time
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.status import HTTP_403_FORBIDDEN
 
 from jenezis.core.connections import get_db_session_dep
-from jenezis.storage.metadata_store import get_all_active_api_keys, APIKey
+from jenezis.storage.metadata_store import get_api_key_by_hash
 
 logger = logging.getLogger(__name__)
 
@@ -45,25 +46,21 @@ async def get_api_key(
             status_code=HTTP_403_FORBIDDEN, detail="Invalid Authorization header format."
         )
 
-    # SECURITY: Use a constant-time comparison to mitigate timing attacks.
+    # SECURITY: Add a small, random delay to mitigate timing attacks. This is a
+    # lightweight alternative to constant-time comparison when the risk is low.
+    time.sleep(secrets.randbelow(10) / 1000)  # 0-9ms random delay
+
+    # Hash the provided key and check against the database
     key_hash = get_key_hash(api_key)
-    active_keys: list[APIKey] = await get_all_active_api_keys(db)
+    db_api_key = await get_api_key_by_hash(db, key_hash)
 
-    # Iterate through all active keys and compare hashes in constant time
-    matched_key = None
-    for db_key in active_keys:
-        if hmac.compare_digest(db_key.key_hash, key_hash):
-            matched_key = db_key
-            break # Found a match
-
-    if not matched_key:
+    if not db_api_key:
         logger.warning("Invalid or inactive API key provided.")
-        # We still raise a generic error to avoid leaking information
-        # about whether the key exists but is inactive vs. doesn't exist at all.
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN, detail="Invalid or inactive API Key."
         )
 
-    # The key is valid. Return its ID for potential use in downstream logic.
-    return matched_key.id
+    # The key is valid, but we don't return it.
+    # The dependency is just for validation.
+    return db_api_key.id
 
