@@ -222,7 +222,7 @@ jobs:
 
       - name: Start Services
         run: |
-          docker-compose -f docker/docker-compose.yml up -d --build
+          docker compose -f docker/docker-compose.yml up -d --build
           echo "Waiting for services to become healthy..."
           sleep 60
 
@@ -240,7 +240,7 @@ jobs:
 
       - name: Stop Services
         if: always()
-        run: docker-compose -f docker/docker-compose.yml down
+        run: docker compose -f docker/docker-compose.yml down
 
   # ============================================================================
   # Stage 5: Coverage Gate
@@ -334,7 +334,7 @@ jobs:
 
       - name: Start Services
         run: |
-          docker-compose -f docker/docker-compose.yml up -d --build
+          docker compose -f docker/docker-compose.yml up -d --build
           sleep 60
 
       - name: Run RAGAS Evaluation
@@ -347,7 +347,7 @@ jobs:
 
       - name: Stop Services
         if: always()
-        run: docker-compose -f docker/docker-compose.yml down
+        run: docker compose -f docker/docker-compose.yml down
 
   # ============================================================================
   # Stage 7: Load Testing (Manual Trigger Only)
@@ -386,7 +386,7 @@ jobs:
 
       - name: Start Services
         run: |
-          docker-compose -f docker/docker-compose.yml up -d --build
+          docker compose -f docker/docker-compose.yml up -d --build
           sleep 60
 
       - name: Run Load Tests (100 users, 5 min)
@@ -413,4 +413,4 @@ jobs:
 
       - name: Stop Services
         if: always()
-        run: docker-compose -f docker/docker-compose.yml down
+        run: docker compose -f docker/docker-compose.yml down
