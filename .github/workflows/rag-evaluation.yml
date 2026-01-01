@@ -212,6 +212,11 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-root
 
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          docker system prune -af
+
       - name: Create CI Environment
         run: |
           cp .env.example .env
