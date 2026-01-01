@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JENEZIS is a neuro-symbolic GraphRAG framework combining a **Canonical Store** (PostgreSQL+pgvector) with a **Projection Graph** (Neo4j) orchestrated by LLM-driven extraction and resolution.
+JENEZIS is a neuro-symbolic GraphRAG framework combining a **Canonical Store** (PostgreSQL+pgvector) with a **Projection Graph** (FalkorDB) orchestrated by LLM-driven extraction and resolution.
 
 ## Commands
 
 ### Development Setup
 ```bash
 poetry install && poetry shell  # Always activate virtualenv first
-cp .env.example .env  # Configure INITIAL_ADMIN_KEY, OPENAI_API_KEY, POSTGRES_*, NEO4J_PASSWORD
+cp .env.example .env  # Configure INITIAL_ADMIN_KEY, OPENAI_API_KEY, POSTGRES_*, FALKOR_*
 docker-compose -f docker/docker-compose.yml up --build -d
 ```
 
@@ -64,8 +64,16 @@ poetry export -f requirements.txt --without-hashes | safety check --stdin
 
 ### Core Principle: Canonical → Projection Separation
 - **Canonical Store (PostgreSQL+pgvector)**: Source of truth for entities, aliases, ontologies
-- **Projection Graph (Neo4j)**: Derived reasoning layer, rebuildable from canonical store
+- **Projection Graph (FalkorDB)**: Derived reasoning layer, rebuildable from canonical store
 - This separation enables full audit trails and prevents data drift
+
+### Graph Database: FalkorDB (migrated from Neo4j)
+The codebase uses FalkorDB as the graph database backend:
+- **FalkorEngine** (`jenezis/storage/falkor_engine.py`): Core graph engine with OpenCypher support
+- **GraphStore** (`jenezis/storage/graph_store.py`): Facade maintaining API compatibility
+- Native HNSW vector indexing for semantic search
+- No APOC dependency (dynamic labels stored as properties)
+- Redis-based persistence on port 6379
 
 ### Neuro-Symbolic Pipeline ("Harmonizer")
 The ingestion flow in `jenezis/ingestion/`:
@@ -80,11 +88,6 @@ The ingestion flow in `jenezis/ingestion/`:
 - `NodeAlias`: Maps raw text variants to canonical nodes
 - `EnrichmentQueueItem`: Unresolved entities queued for async learning
 - `Document`: Tracks ingestion status via state machine
-
-### Graph Store (`jenezis/storage/graph_store.py`)
-- Uses APOC for dynamic label/relationship creation
-- Cypher injection prevention via strict pattern validation
-- Document→Chunk→Entity relationship hierarchy
 
 ### RAG Pipeline (`jenezis/rag/`)
 - **Retriever** (`retriever.py`): Hybrid search (vector similarity + LLM-planned Cypher), fused via Reciprocal Rank Fusion
@@ -109,7 +112,18 @@ All settings in `jenezis/core/config.py` via Pydantic Settings. Key env vars:
 - `EXTRACTION_MODEL`: Model for entity extraction (default: gpt-3.5-turbo)
 - `GENERATOR_MODEL`: Model for RAG generation (default: gpt-4-turbo)
 - `ENTITY_RESOLUTION_THRESHOLD`: Fuzzy matching score 0-100
+- `FALKOR_HOST`, `FALKOR_PORT`, `FALKOR_GRAPH`: FalkorDB connection settings
 - Docker secrets supported via `*_FILE` env vars (e.g., `OPENAI_API_KEY_FILE`)
+
+## Docker Stack
+
+Services defined in `docker/docker-compose.yml`:
+- **falkordb** (port 6379): Graph database with native vector support
+- **postgres** (port 5432): Metadata store with pgvector
+- **redis** (port 6380): Celery message broker (separate from FalkorDB)
+- **minio** (ports 9000/9001): S3-compatible object storage
+- **api** (port 8000): FastAPI application
+- **worker**: Celery worker for async tasks
 
 ## Testing Notes
 
@@ -129,4 +143,4 @@ All settings in `jenezis/core/config.py` via Pydantic Settings. Key env vars:
 ## Dependencies
 
 - **Python**: 3.11+
-- **Neo4j**: Enterprise edition with APOC plugin (required for dynamic label/relationship creation)
+- **FalkorDB**: Redis-based graph database with OpenCypher support
