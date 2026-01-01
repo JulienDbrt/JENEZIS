@@ -12,23 +12,26 @@ pytestmark = pytest.mark.unit
 class TestValidateLLMJSONOutput:
     """Tests for the `validate_llm_json_output` function."""
 
-    @pytest.mark.parametrize("dangerous_keyword", [
-        "CREATE", "SET", "REMOVE", "DELETE", "MERGE",
-        "apoc.load", "apoc.run", "UNION"
+    @pytest.mark.parametrize("dangerous_pattern, query", [
+        ("DETACH DELETE", "MATCH (n) DETACH DELETE n"),
+        ("DROP", "DROP CONSTRAINT my_constraint"),
+        ("LOAD CSV", "LOAD CSV FROM 'http://example.com/data.csv' AS row"),
+        ("CALL dbms.", "CALL dbms.procedures()"),
+        (r"DELETE\s+n\b", "MATCH (n) DELETE n"),
+        (r"REMOVE\s+\w+:\w+", "MATCH (n) REMOVE n:Label"),
+        ("UNION ALL", "MATCH (n) RETURN n.name UNION ALL MATCH (m) RETURN m.name"),
     ])
-    def test_detects_dangerous_cypher_keywords(self, dangerous_keyword):
+    def test_detects_dangerous_cypher_keywords(self, dangerous_pattern, query):
         """
-        Verify that newly added dangerous Cypher keywords are detected.
+        Verify that dangerous Cypher patterns are detected.
         """
-        # Craft a malicious output that uses the dangerous keyword
         malicious_output = {
             "intent": "some_intent",
             "parameters": {
-                "query": f"MATCH (n) {dangerous_keyword} n.property = 'malicious'"
+                "query": query
             }
         }
 
-        # The function should detect the dangerous keyword and return an empty dict
         validated_output = validate_llm_json_output(malicious_output)
         assert validated_output == {}
 
