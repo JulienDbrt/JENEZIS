@@ -73,6 +73,21 @@ jobs:
     timeout-minutes: 20
     needs: unit-tests
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -96,6 +111,10 @@ jobs:
 
       - name: Install dependencies
         run: poetry install --no-root
+
+      - name: Enable pgvector extension
+        run: |
+          PGPASSWORD=test psql -h localhost -p 5433 -U test -d test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Run Adversarial Tests (Parallel)
         run: |
