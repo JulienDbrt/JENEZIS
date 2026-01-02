@@ -183,11 +183,6 @@ jobs:
     timeout-minutes: 30
     needs: [unit-tests, adversarial-tests]
 
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged
-
     steps:
       - name: Free up disk space
         run: |
@@ -301,11 +296,6 @@ jobs:
     needs: integration-tests
     if: github.ref == 'refs/heads/main'
 
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -363,11 +353,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch'
-
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged
 
     steps:
       - name: Checkout repository
