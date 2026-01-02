@@ -232,6 +232,12 @@ jobs:
           echo "INITIAL_ADMIN_KEY=${{ secrets.DH_API_SECRET_KEY_CI || 'ci-test-key-12345' }}" >> .env
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || 'sk-test' }}" >> .env
           sed -i 's/your-neo4j-password/ci-password/g' .env
+          # Sync PostgreSQL credentials between .env and Docker secrets
+          sed -i 's/POSTGRES_USER=user/POSTGRES_USER=jenezis/g' .env
+          sed -i 's/POSTGRES_PASSWORD=password/POSTGRES_PASSWORD=ci-postgres-password/g' .env
+          sed -i 's|postgresql+asyncpg://user:password@localhost:5432/jenezis|postgresql+asyncpg://jenezis:ci-postgres-password@localhost:5432/jenezis|g' .env
+          # Sync MinIO credentials
+          sed -i 's/S3_AWS_SECRET_ACCESS_KEY="minioadmin"/S3_AWS_SECRET_ACCESS_KEY="ci-minio-secret-key"/g' .env
           # Create Docker secrets files
           mkdir -p secrets
           echo "ci-postgres-password" > secrets/postgres_password.txt
@@ -344,6 +350,12 @@ jobs:
           echo "INITIAL_ADMIN_KEY=${{ secrets.DH_API_SECRET_KEY_CI }}" >> .env
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
           sed -i 's/your-neo4j-password/ci-password/g' .env
+          # Sync PostgreSQL credentials between .env and Docker secrets
+          sed -i 's/POSTGRES_USER=user/POSTGRES_USER=jenezis/g' .env
+          sed -i 's/POSTGRES_PASSWORD=password/POSTGRES_PASSWORD=ci-postgres-password/g' .env
+          sed -i 's|postgresql+asyncpg://user:password@localhost:5432/jenezis|postgresql+asyncpg://jenezis:ci-postgres-password@localhost:5432/jenezis|g' .env
+          # Sync MinIO credentials
+          sed -i 's/S3_AWS_SECRET_ACCESS_KEY="minioadmin"/S3_AWS_SECRET_ACCESS_KEY="ci-minio-secret-key"/g' .env
           # Create Docker secrets files
           mkdir -p secrets
           echo "ci-postgres-password" > secrets/postgres_password.txt
@@ -396,6 +408,12 @@ jobs:
           sed -i 's/localhost/0.0.0.0/g' .env
           echo "INITIAL_ADMIN_KEY=${{ secrets.DH_API_SECRET_KEY_CI }}" >> .env
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          # Sync PostgreSQL credentials between .env and Docker secrets
+          sed -i 's/POSTGRES_USER=user/POSTGRES_USER=jenezis/g' .env
+          sed -i 's/POSTGRES_PASSWORD=password/POSTGRES_PASSWORD=ci-postgres-password/g' .env
+          sed -i 's|postgresql+asyncpg://user:password@localhost:5432/jenezis|postgresql+asyncpg://jenezis:ci-postgres-password@localhost:5432/jenezis|g' .env
+          # Sync MinIO credentials
+          sed -i 's/S3_AWS_SECRET_ACCESS_KEY="minioadmin"/S3_AWS_SECRET_ACCESS_KEY="ci-minio-secret-key"/g' .env
           # Create Docker secrets files
           mkdir -p secrets
           echo "ci-postgres-password" > secrets/postgres_password.txt
