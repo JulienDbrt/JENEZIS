@@ -252,7 +252,25 @@ jobs:
           sleep 60
 
       - name: Verify Services
-        run: docker ps -a
+        run: |
+          docker ps -a
+          echo "=== Checking API container logs ==="
+          docker logs jenezis-api 2>&1 | tail -50 || true
+
+      - name: Wait for API and run migrations
+        run: |
+          # Wait for API to be ready (migrations should have run)
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/docs > /dev/null; then
+              echo "API is ready!"
+              break
+            fi
+            echo "Waiting for API... attempt $i"
+            sleep 5
+          done
+          # Show final .env config (censored)
+          echo "=== .env DB config ==="
+          grep -E "(POSTGRES|METADATA_STORE)" .env | sed 's/password=[^@]*/password=***/'
 
       - name: Run Integration Tests
         run: |
