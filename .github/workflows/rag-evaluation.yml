@@ -184,11 +184,23 @@ jobs:
     needs: [unit-tests, adversarial-tests]
 
     steps:
-      - name: Free up disk space
+      - name: Free up disk space (aggressive)
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker system prune -af
-          df -h
+          echo "=== Before cleanup ==="
+          df -h /
+          # Remove major space consumers (~25GB total)
+          sudo rm -rf /usr/share/dotnet              # ~6GB
+          sudo rm -rf /usr/local/lib/android         # ~10GB
+          sudo rm -rf /opt/ghc                       # ~2.3GB
+          sudo rm -rf /opt/hostedtoolcache/CodeQL   # ~1GB
+          sudo rm -rf /usr/share/swift               # ~1.5GB
+          sudo rm -rf /opt/az                        # ~2GB
+          sudo rm -rf /usr/local/.ghcup              # ~1GB
+          sudo rm -rf /home/runner/.cargo            # ~500MB
+          sudo rm -rf /usr/local/share/boost         # ~500MB
+          sudo docker system prune -af --volumes
+          echo "=== After cleanup ==="
+          df -h /
 
       - name: Checkout repository
         uses: actions/checkout@v4
