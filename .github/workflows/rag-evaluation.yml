@@ -238,7 +238,8 @@ jobs:
           sed -i 's|http://localhost:9000|http://0.0.0.0:9000|g' .env
           sed -i 's|bolt://localhost:7687|bolt://0.0.0.0:7687|g' .env
           sed -i 's|redis://localhost:|redis://0.0.0.0:|g' .env
-          echo "INITIAL_ADMIN_KEY=${{ secrets.DH_API_SECRET_KEY_CI || 'ci-test-key-12345' }}" >> .env
+          # Use test-api-key-12345 to match conftest.py auth_headers fixture
+          echo "INITIAL_ADMIN_KEY=test-api-key-12345" >> .env
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || 'sk-test' }}" >> .env
           sed -i 's/your-neo4j-password/ci-password/g' .env
           # Sync MinIO credentials
