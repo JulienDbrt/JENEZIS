@@ -105,7 +105,9 @@ services:
       - FALKOR_HOST=falkordb
       - FALKOR_PORT=6379
       - FALKOR_GRAPH=jenezis
-      # Metadata store
+      # Metadata store - override localhost with Docker service name
+      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-jenezis}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-jenezis}
+      - POSTGRES_HOST=postgres
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
       # Object storage
       - S3_ENDPOINT_URL=http://minio:9000
@@ -141,7 +143,9 @@ services:
       - FALKOR_HOST=falkordb
       - FALKOR_PORT=6379
       - FALKOR_GRAPH=jenezis
-      # Metadata store
+      # Metadata store - override localhost with Docker service name
+      - METADATA_STORE_URL=postgresql+asyncpg://${POSTGRES_USER:-jenezis}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-jenezis}
+      - POSTGRES_HOST=postgres
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
       # Object storage
       - S3_ENDPOINT_URL=http://minio:9000
