@@ -24,6 +24,7 @@ os.environ.setdefault("INITIAL_ADMIN_KEY", "test-admin-key-12345")
 import asyncio
 import json
 import hashlib
+import uuid
 from typing import AsyncGenerator, Dict, List, Any, Optional
 from unittest.mock import MagicMock, AsyncMock, patch
 from contextlib import asynccontextmanager
@@ -398,10 +399,21 @@ def mock_s3_client(monkeypatch) -> MockS3Client:
     """
     Patches boto3 S3 client with an in-memory mock.
     Critical for testing path traversal and file upload vulnerabilities.
+
+    Note: We patch both the module-level s3_client variable AND the getter
+    function because the S3 client is initialized at module load time.
     """
     mock_client = MockS3Client()
     mock_client.create_bucket(Bucket="jenezis-documents")
 
+    # Patch the module-level s3_client variable directly
+    # This is necessary because initialization happens at import time
+    monkeypatch.setattr(
+        "jenezis.core.connections.s3_client",
+        mock_client
+    )
+
+    # Also patch the getter function for completeness
     def mock_get_s3_client():
         return mock_client
 
@@ -441,9 +453,10 @@ def auth_headers(valid_api_key) -> Dict[str, str]:
 
 @pytest.fixture
 def sample_ontology() -> Dict[str, Any]:
-    """Returns a sample ontology schema for testing."""
+    """Returns a sample ontology schema for testing with unique name."""
+    unique_suffix = uuid.uuid4().hex[:8]
     return {
-        "name": "Test Ontology",
+        "name": f"Test Ontology {unique_suffix}",
         "schema_json": {
             "entity_types": ["Person", "Organization", "Risk", "Control"],
             "relation_types": ["WORKS_FOR", "MITIGATES", "AFFECTS"],
@@ -549,3 +562,45 @@ def path_traversal_payloads() -> List[str]:
         "s3://other-bucket/secret",
         "file:///etc/passwd",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Mock Generator for Integration Tests
+# ---------------------------------------------------------------------------
+
+class MockGenerator:
+    """
+    Mock generator for testing RAG queries without real LLM API.
+    Used in integration tests where we don't have valid OpenAI keys.
+    """
+
+    async def rag_query_with_sources(self, query: str):
+        """Return mock response for testing."""
+        async def mock_response():
+            yield "Mock response for testing RAG query"
+
+        return mock_response(), [{"document_id": 1, "chunk_id": "c1", "score": 0.9}]
+
+
+@pytest.fixture
+def mock_generator(monkeypatch):
+    """
+    Mocks the RAG generator to avoid needing real OpenAI API key.
+    This patches app_state['generator'] for integration tests.
+
+    Required for tests that use the /query endpoint when OPENAI_API_KEY
+    is not set or is invalid (like 'sk-test' in CI).
+    """
+    mock_gen = MockGenerator()
+
+    # Import app_state and patch it directly
+    from examples.fastapi_app.main import app_state
+    app_state["generator"] = mock_gen
+
+    # Also patch the Generator class to prevent real initialization during lifespan
+    monkeypatch.setattr(
+        "jenezis.rag.generator.Generator",
+        lambda retriever: mock_gen
+    )
+
+    return mock_gen

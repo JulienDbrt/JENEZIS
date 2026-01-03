@@ -30,11 +30,14 @@ poetry run pytest tests/adversarial/ -v
 # Integration tests (requires full Docker stack)
 poetry run pytest tests/integration/ -v
 
-# All tests with coverage
-poetry run pytest tests/unit/ tests/adversarial/ --cov=jenezis
+# All tests with coverage (80% minimum enforced by CI)
+poetry run pytest tests/unit/ tests/adversarial/ --cov=jenezis --cov-fail-under=80
 
 # Single test file
 poetry run pytest tests/adversarial/test_cypher_injection.py -v
+
+# Parallel execution (used in CI)
+poetry run pytest tests/unit/ -n 4 -v
 
 # By marker
 poetry run pytest -m adversarial  # Security tests
@@ -83,7 +86,7 @@ The ingestion flow in `jenezis/ingestion/`:
 4. **Resolver** (`resolver.py`): Maps entities to canonical store (exact match → vector similarity → enrichment queue)
 
 ### Key SQLAlchemy Models (`jenezis/storage/metadata_store.py`)
-- `DomainConfig`: User-defined ontology (entity_types, relation_types)
+- `Ontology` (aliased as DomainConfig): User-defined ontology (entity_types, relation_types)
 - `CanonicalNode`: Canonical entity with embedding vector
 - `NodeAlias`: Maps raw text variants to canonical nodes
 - `EnrichmentQueueItem`: Unresolved entities queued for async learning
@@ -102,7 +105,7 @@ The ingestion flow in `jenezis/ingestion/`:
 ### Security Hardening
 - **Prompt injection**: `jenezis/core/prompt_security.py` - sanitizes ontology schemas and retriever outputs
 - **Cypher injection**: `graph_store.py` - validates dynamic labels/relations against strict regex patterns
-- **Path traversal**: Upload handler blocks `../`, null bytes, protocol injection
+- **Path traversal**: Upload handler (`examples/fastapi_app/main.py:sanitize_filename`) blocks `../`, null bytes, protocol injection
 - **State machine**: Document status transitions enforced to prevent invalid states
 
 ## Configuration
@@ -128,10 +131,22 @@ Services defined in `docker/docker-compose.yml`:
 ## Testing Notes
 
 - Tests use `pytest-asyncio` with `asyncio_mode = "auto"` - no need for `@pytest.mark.asyncio` decorators
-- Fixtures in `tests/conftest.py` provide mock LLM, Neo4j, and S3 clients with recording capabilities
+- Fixtures in `tests/conftest.py` provide mock LLM, graph driver, and S3 clients with recording capabilities
 - `CypherQueryRecorder` and `MockLLMClient` fixtures enable injection detection tests
 - Adversarial tests require test PostgreSQL on port 5433 (see Run Tests section)
 - Test markers: `unit`, `integration`, `adversarial`, `slow`, `evaluation`
+- Race condition tests run sequentially (not parallelized) due to timing sensitivity
+
+## CI Pipeline (`.github/workflows/rag-evaluation.yml`)
+
+Multi-stage pipeline with 80% coverage gate:
+1. **Unit Tests** - Fast, isolated tests with coverage
+2. **Adversarial Tests** - Security tests with test PostgreSQL service
+3. **Security Scan** - Bandit SAST + Safety dependency check
+4. **Integration Tests** - Full Docker stack required
+5. **Coverage Gate** - Enforces 80% minimum coverage
+6. **RAGAS Evaluation** - Quality evaluation (main branch only)
+7. **Load Tests** - Locust load testing (manual trigger only)
 
 ## API Endpoints (`examples/fastapi_app/main.py`)
 

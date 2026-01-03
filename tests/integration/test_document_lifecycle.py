@@ -186,6 +186,7 @@ class TestRAGQuery:
         self,
         async_client,
         auth_headers,
+        mock_generator,
     ):
         """Querying empty index should return graceful response."""
         response = await async_client.post(
