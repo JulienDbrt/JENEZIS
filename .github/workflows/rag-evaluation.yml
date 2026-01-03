@@ -251,6 +251,10 @@ jobs:
 
       - name: Start Services
         run: |
+          # Export env vars for docker-compose variable substitution
+          export POSTGRES_USER=jenezis
+          export POSTGRES_PASSWORD=ci-postgres-password
+          export POSTGRES_DB=jenezis
           docker compose -f docker/docker-compose.yml up -d --build
           echo "Waiting for services to become healthy..."
           sleep 60
@@ -390,6 +394,10 @@ jobs:
 
       - name: Start Services
         run: |
+          # Export env vars for docker-compose variable substitution
+          export POSTGRES_USER=jenezis
+          export POSTGRES_PASSWORD=ci-postgres-password
+          export POSTGRES_DB=jenezis
           docker compose -f docker/docker-compose.yml up -d --build
           sleep 60
 
@@ -451,6 +459,10 @@ jobs:
 
       - name: Start Services
         run: |
+          # Export env vars for docker-compose variable substitution
+          export POSTGRES_USER=jenezis
+          export POSTGRES_PASSWORD=ci-postgres-password
+          export POSTGRES_DB=jenezis
           docker compose -f docker/docker-compose.yml up -d --build
           sleep 60
 
