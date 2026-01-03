@@ -64,6 +64,7 @@ class TestDocumentUpload:
         self,
         async_client,
         auth_headers,
+        mock_s3_client,
     ):
         """Uploading without ontology_id should be handled."""
         file_content = b"Test content"
